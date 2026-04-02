@@ -1,7 +1,6 @@
 "use client";
 
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { auth, storage } from "@/lib/firebase/client";
+import { auth } from "@/lib/firebase/client";
 import type { Property } from "@/types";
 
 type PropertyApiItem = Property & {
@@ -92,28 +91,64 @@ export async function updateProperty(id: string, data: Omit<Property, "id">): Pr
 export async function uploadPropertyImageBlobUrls(
   propertyId: string,
   imageBlobUrls: string[],
+  localFilesByUrl: Record<string, File> = {},
 ): Promise<string[]> {
   if (!propertyId || imageBlobUrls.length === 0) {
     return [];
   }
 
-  const uploaded = await Promise.all(
-    imageBlobUrls.map(async (blobUrl, index) => {
-      const blobResponse = await fetch(blobUrl);
-      if (!blobResponse.ok) {
-        throw new Error("Failed to read selected image for upload.");
-      }
+  const idToken = await auth.currentUser?.getIdToken();
+  const headers = new Headers();
 
-      const blob = await blobResponse.blob();
+  if (idToken) {
+    headers.set("Authorization", `Bearer ${idToken}`);
+  }
+
+  const formData = new FormData();
+  formData.append("propertyId", propertyId);
+
+  await Promise.all(
+    imageBlobUrls.map(async (blobUrl, index) => {
+      const file = localFilesByUrl[blobUrl];
+      const blob = file
+        ? file
+        : await (async () => {
+            const blobResponse = await fetch(blobUrl);
+            if (!blobResponse.ok) {
+              throw new Error("Failed to read selected image for upload.");
+            }
+
+            return blobResponse.blob();
+          })();
+
       const contentType = blob.type || "application/octet-stream";
       const ext = extensionFromMimeType(contentType);
-      const fileName = `${Date.now()}-${index}.${ext}`;
-      const fileRef = ref(storage, `properties/${propertyId}/${fileName}`);
+      const fileName = file?.name || `property-image-${index + 1}.${ext}`;
+      const uploadFile =
+        file || new File([blob], fileName, {
+          type: contentType,
+        });
 
-      await uploadBytes(fileRef, blob, { contentType });
-      return getDownloadURL(fileRef);
+      formData.append("files", uploadFile, uploadFile.name);
     }),
   );
 
-  return uploaded;
+  const response = await fetch("/api/properties/upload-images", {
+    method: "POST",
+    headers,
+    body: formData,
+    cache: "no-store",
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message =
+      typeof payload?.error === "string"
+        ? payload.error
+        : `Property image upload failed (${response.status}).`;
+    throw new Error(message);
+  }
+
+  return Array.isArray(payload.urls) ? payload.urls : [];
 }

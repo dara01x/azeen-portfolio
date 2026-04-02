@@ -40,6 +40,8 @@ type CoordinatesValue = {
   lng: number;
 };
 
+type LocalImageFileMap = Record<string, File>;
+
 function parseOptionalNumber(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -50,7 +52,7 @@ function parseOptionalNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function splitImageUrls(images: string[]) {
+function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   const uploadedImages: string[] = [];
   const localBlobImages: string[] = [];
 
@@ -59,7 +61,7 @@ function splitImageUrls(images: string[]) {
       return;
     }
 
-    if (image.startsWith("blob:")) {
+    if (localFilesByUrl[image] || image.startsWith("blob:") || image.startsWith("data:")) {
       localBlobImages.push(image);
     } else {
       uploadedImages.push(image);
@@ -105,6 +107,7 @@ const PropertyForm = () => {
   const [cities, setCities] = useState<City[]>([]);
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [views, setViews] = useState<ViewType[]>([]);
+  const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(prev => ({ ...prev, [key]: value }));
   const selectedCoordinates = useMemo<CoordinatesValue | null>(() => {
     if (typeof form.lat === "number" && Number.isFinite(form.lat) && typeof form.lng === "number" && Number.isFinite(form.lng)) {
@@ -159,6 +162,7 @@ const PropertyForm = () => {
   useEffect(() => {
     if (!isEdit) {
       setLoading(false);
+      setLocalImageFiles({});
       return;
     }
 
@@ -182,6 +186,7 @@ const PropertyForm = () => {
           return;
         }
 
+        setLocalImageFiles({});
         const { id: _id, ...rest } = property;
         setForm({ ...defaultProperty, ...rest });
       })
@@ -211,10 +216,18 @@ const PropertyForm = () => {
     setError(null);
 
     try {
-      const { uploadedImages, localBlobImages } = splitImageUrls(form.images);
+      const activeLocalFiles = Object.fromEntries(
+        Object.entries(localImageFiles).filter(([imageUrl]) => form.images.includes(imageUrl)),
+      ) as LocalImageFileMap;
+
+      const { uploadedImages, localBlobImages } = splitImageUrls(form.images, activeLocalFiles);
 
       if (isEdit && id) {
-        const newlyUploadedImages = await uploadPropertyImageBlobUrls(id, localBlobImages);
+        const newlyUploadedImages = await uploadPropertyImageBlobUrls(id, localBlobImages, activeLocalFiles);
+        if (localBlobImages.length > 0 && newlyUploadedImages.length === 0) {
+          throw new Error("Image upload did not complete. Please reselect images and try again.");
+        }
+
         const allImages = [...uploadedImages, ...newlyUploadedImages];
 
         await updateProperty(id, {
@@ -229,7 +242,15 @@ const PropertyForm = () => {
           main_image: uploadedImages[0],
         });
 
-        const newlyUploadedImages = await uploadPropertyImageBlobUrls(created.id, localBlobImages);
+        const newlyUploadedImages = await uploadPropertyImageBlobUrls(
+          created.id,
+          localBlobImages,
+          activeLocalFiles,
+        );
+        if (localBlobImages.length > 0 && newlyUploadedImages.length === 0) {
+          throw new Error("Image upload did not complete. Please reselect images and try again.");
+        }
+
         const allImages = [...uploadedImages, ...newlyUploadedImages];
 
         if (allImages.length > 0) {
@@ -240,6 +261,12 @@ const PropertyForm = () => {
           });
         }
       }
+
+      Object.keys(activeLocalFiles).forEach((imageUrl) => {
+        URL.revokeObjectURL(imageUrl);
+      });
+
+      setLocalImageFiles({});
 
       router.push("/properties");
     } catch (submitError) {
@@ -406,7 +433,42 @@ const PropertyForm = () => {
 
         <FormSection title="Media" description="Upload images and add video links">
           <div className="space-y-5">
-            <div><Label className="mb-3 block">Images</Label><ImageUpload images={form.images} onChange={imgs => update("images", imgs)} /></div>
+            <div>
+              <Label className="mb-3 block">Images</Label>
+              <ImageUpload
+                images={form.images}
+                onLocalFilesAdded={(entries) => {
+                  setLocalImageFiles((prev) => {
+                    const next = { ...prev };
+                    entries.forEach((entry) => {
+                      next[entry.url] = entry.file;
+                    });
+                    return next;
+                  });
+                }}
+                onChange={(imgs) => {
+                  const removedLocalUrls = form.images.filter(
+                    (url) => url.startsWith("blob:") && !imgs.includes(url),
+                  );
+
+                  removedLocalUrls.forEach((imageUrl) => {
+                    URL.revokeObjectURL(imageUrl);
+                  });
+
+                  setLocalImageFiles((prev) => {
+                    const next: LocalImageFileMap = {};
+                    imgs.forEach((imageUrl) => {
+                      if (prev[imageUrl]) {
+                        next[imageUrl] = prev[imageUrl];
+                      }
+                    });
+                    return next;
+                  });
+
+                  update("images", imgs);
+                }}
+              />
+            </div>
             <Separator />
             <div className="space-y-2"><Label>Video URL (YouTube)</Label><Input value={form.video_url || ""} onChange={e => update("video_url", e.target.value)} placeholder="https://youtube.com/watch?v=..." /></div>
           </div>

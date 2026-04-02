@@ -59,6 +59,11 @@ function asStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
+function isLocalPreviewUrl(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("blob:") || normalized.startsWith("data:");
+}
+
 function toIso(value: unknown): string | null {
   if (value instanceof Timestamp) {
     return value.toDate().toISOString();
@@ -98,7 +103,9 @@ function normalizePropertyData(input: PropertyWriteInput) {
   const address = normalizeAddress(input);
   const coordinates = normalizeCoordinates(input);
   const description = normalizeDescription(input);
-  const images = asStringArray(input.images);
+  const images = asStringArray(input.images).filter((image) => !isLocalPreviewUrl(image));
+  const mainImageInput = asString(input.main_image);
+  const sanitizedMainImage = isLocalPreviewUrl(mainImageInput) ? "" : mainImageInput;
 
   return {
     title: asString(input.title),
@@ -125,7 +132,7 @@ function normalizePropertyData(input: PropertyWriteInput) {
     building_name: asString(input.building_name),
     description,
     images,
-    main_image: asString(input.main_image) || images[0] || "",
+    main_image: sanitizedMainImage || images[0] || "",
     video_url: asString(input.video_url),
     project_id: asString(input.project_id),
     owner_client_id: asString(input.owner_client_id),

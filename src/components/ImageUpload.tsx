@@ -1,17 +1,36 @@
 import { useRef } from "react";
 import { ImagePlus, X } from "lucide-react";
 
-export function ImageUpload({ images = [], onChange }: { images: string[]; onChange: (imgs: string[]) => void }) {
+type LocalImageEntry = {
+  url: string;
+  file: File;
+};
+
+export function ImageUpload({
+  images = [],
+  onChange,
+  onLocalFilesAdded,
+}: {
+  images: string[];
+  onChange: (imgs: string[]) => void;
+  onLocalFilesAdded?: (entries: LocalImageEntry[]) => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFilesSelected = (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    const localImageUrls = Array.from(files)
+    const localImageEntries = Array.from(files)
       .filter((file) => file.type.startsWith("image/"))
-      .map((file) => URL.createObjectURL(file));
+      .map((file) => ({
+        url: URL.createObjectURL(file),
+        file,
+      }));
+
+    const localImageUrls = localImageEntries.map((entry) => entry.url);
 
     if (localImageUrls.length > 0) {
+      onLocalFilesAdded?.(localImageEntries);
       onChange([...images, ...localImageUrls]);
     }
   };

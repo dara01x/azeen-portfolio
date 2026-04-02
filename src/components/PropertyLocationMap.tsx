@@ -191,6 +191,7 @@ function MapLibreCanvas({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markerRef = useRef<MapLibreMarker | null>(null);
+  const markerCoordinatesRef = useRef<PropertyCoordinates | null>(null);
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const styleIdRef = useRef(DEFAULT_STYLE_ID);
   const onChangeRef = useRef(onChange);
@@ -201,6 +202,7 @@ function MapLibreCanvas({
     nextCoordinates: PropertyCoordinates,
   ) => {
     const nextLngLat = toLngLat(nextCoordinates);
+    markerCoordinatesRef.current = nextCoordinates;
 
     if (!markerRef.current) {
       markerRef.current = new maplibre.Marker({ color: MARKER_COLOR }).setLngLat(nextLngLat).addTo(map);
@@ -254,9 +256,13 @@ function MapLibreCanvas({
       });
       map.addControl(scaleControl, "bottom-left");
 
-      if (coordinates) {
+      map.once("load", () => {
+        if (cancelled || !coordinates) {
+          return;
+        }
+
         setMarkerPosition(map, maplibre, coordinates);
-      }
+      });
 
       if (interactive) {
         const navigationControl = new maplibre.NavigationControl({
@@ -266,16 +272,14 @@ function MapLibreCanvas({
         });
         map.addControl(navigationControl, "top-right");
 
-        const fullscreenControl = new maplibre.FullscreenControl({
-          container: shellRef.current ?? undefined,
-        });
+        const fullscreenControl = new maplibre.FullscreenControl();
         map.addControl(fullscreenControl, "top-left");
 
         const geolocateControl = new maplibre.GeolocateControl({
           positionOptions: {
-            enableHighAccuracy: true,
-            timeout: 12000,
-            maximumAge: 0,
+            enableHighAccuracy: false,
+            timeout: 20000,
+            maximumAge: 60000,
           },
           trackUserLocation: false,
           showUserLocation: false,
@@ -285,26 +289,146 @@ function MapLibreCanvas({
             duration: 700,
           },
         });
-        geolocateControl.on("geolocate", (event: GeolocationPosition) => {
+
+        let geolocateRetryTimer: ReturnType<typeof setTimeout> | null = null;
+        let geolocateWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const clearGeolocateRetryTimer = () => {
+          if (geolocateRetryTimer) {
+            clearTimeout(geolocateRetryTimer);
+            geolocateRetryTimer = null;
+          }
+        };
+
+        const clearGeolocateWatchdogTimer = () => {
+          if (geolocateWatchdogTimer) {
+            clearTimeout(geolocateWatchdogTimer);
+            geolocateWatchdogTimer = null;
+          }
+        };
+
+        const applyDetectedLocation = (position: GeolocationPosition, centerMap = false) => {
           const nextCoordinates: PropertyCoordinates = {
-            lat: Number(event.coords.latitude.toFixed(6)),
-            lng: Number(event.coords.longitude.toFixed(6)),
+            lat: Number(position.coords.latitude.toFixed(6)),
+            lng: Number(position.coords.longitude.toFixed(6)),
           };
 
           setMarkerPosition(map, maplibre, nextCoordinates);
-          map.easeTo({
-            center: toLngLat(nextCoordinates),
-            zoom: CURRENT_LOCATION_ZOOM,
-            duration: 700,
-          });
+
+          if (centerMap) {
+            map.easeTo({
+              center: toLngLat(nextCoordinates),
+              zoom: CURRENT_LOCATION_ZOOM,
+              duration: 700,
+            });
+          }
 
           onChangeRef.current?.(nextCoordinates);
+        };
+
+        const runFallbackLocate = (attempt = 0) => {
+          if (typeof navigator === "undefined" || !navigator.geolocation) {
+            return;
+          }
+
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              clearGeolocateRetryTimer();
+              clearGeolocateWatchdogTimer();
+              applyDetectedLocation(position, true);
+            },
+            (error) => {
+              const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
+              const isCoreLocationUnknown =
+                message.includes("kclerrorlocationunknown") || message.includes("locationunknown");
+              const isPositionUnavailable = error.code === 2;
+
+              if ((isCoreLocationUnknown || isPositionUnavailable) && attempt < 2) {
+                clearGeolocateRetryTimer();
+                geolocateRetryTimer = setTimeout(() => {
+                  runFallbackLocate(attempt + 1);
+                }, 1200);
+              }
+            },
+            {
+              enableHighAccuracy: false,
+              timeout: 20000,
+              maximumAge: 60000,
+            },
+          );
+        };
+
+        const handleGeolocate = (event: GeolocationPosition) => {
+          clearGeolocateRetryTimer();
+          clearGeolocateWatchdogTimer();
+          applyDetectedLocation(event);
+        };
+
+        const handleGeolocateError = (error: { code?: number; message?: string }) => {
+          clearGeolocateWatchdogTimer();
+          const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
+          const isCoreLocationUnknown =
+            message.includes("kclerrorlocationunknown") || message.includes("locationunknown");
+          const isPositionUnavailable = error.code === 2;
+
+          if (isCoreLocationUnknown || isPositionUnavailable) {
+            clearGeolocateRetryTimer();
+
+            // CoreLocation unknown is often transient; retry shortly with relaxed settings.
+            geolocateRetryTimer = setTimeout(() => {
+              runFallbackLocate();
+            }, 900);
+
+            return;
+          }
+
+          runFallbackLocate();
+        };
+
+        geolocateControl.on("geolocate", handleGeolocate);
+        geolocateControl.on("error", handleGeolocateError);
+
+        const geolocateButton = map
+          .getContainer()
+          .querySelector<HTMLButtonElement>(".maplibregl-ctrl-geolocate");
+
+        const handleGeolocateButtonClick = () => {
+          clearGeolocateWatchdogTimer();
+          geolocateWatchdogTimer = setTimeout(() => {
+            runFallbackLocate();
+          }, 2500);
+        };
+
+        geolocateButton?.addEventListener("click", handleGeolocateButtonClick);
+
+        map.on("remove", () => {
+          clearGeolocateRetryTimer();
+          clearGeolocateWatchdogTimer();
+          geolocateButton?.removeEventListener("click", handleGeolocateButtonClick);
+          geolocateControl.off("geolocate", handleGeolocate);
+          geolocateControl.off("error", handleGeolocateError);
         });
 
         map.addControl(geolocateControl, "top-left");
 
         const styleControl = createBaseStyleControl(styleIdRef, (nextStyleId) => {
           const nextStyle = getBaseStyle(nextStyleId);
+
+          map.once("styledata", () => {
+            const lastMarkerCoordinates = markerCoordinatesRef.current;
+
+            if (markerRef.current) {
+              markerRef.current.remove();
+              markerRef.current = null;
+            }
+
+            if (!lastMarkerCoordinates) {
+              return;
+            }
+
+            setMarkerPosition(map, maplibre, lastMarkerCoordinates);
+          });
+
           map.setStyle(nextStyle.style, { diff: false });
         });
         map.addControl(styleControl, "top-right");
@@ -330,16 +454,37 @@ function MapLibreCanvas({
         });
       }
 
-      const handleResize = () => map.resize();
-      window.addEventListener("resize", handleResize);
-      document.addEventListener("fullscreenchange", handleResize);
+      let fullscreenResizeTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const handleWindowResize = () => {
+        map.resize();
+      };
+
+      const handleFullscreenResize = () => {
+        if (fullscreenResizeTimer) {
+          clearTimeout(fullscreenResizeTimer);
+        }
+
+        fullscreenResizeTimer = setTimeout(() => {
+          map.resize();
+        }, 200);
+      };
+
+      window.addEventListener("resize", handleWindowResize);
+      document.addEventListener("fullscreenchange", handleFullscreenResize);
 
       cleanupMap = () => {
-        window.removeEventListener("resize", handleResize);
-        document.removeEventListener("fullscreenchange", handleResize);
+        if (fullscreenResizeTimer) {
+          clearTimeout(fullscreenResizeTimer);
+          fullscreenResizeTimer = null;
+        }
+
+        window.removeEventListener("resize", handleWindowResize);
+        document.removeEventListener("fullscreenchange", handleFullscreenResize);
         map.remove();
         mapRef.current = null;
         markerRef.current = null;
+        markerCoordinatesRef.current = null;
         maplibreRef.current = null;
       };
     }
@@ -359,14 +504,18 @@ function MapLibreCanvas({
       return;
     }
 
-    if (coordinates && isFiniteNumber(coordinates.lat) && isFiniteNumber(coordinates.lng)) {
-      setMarkerPosition(map, maplibre, coordinates);
-      map.easeTo({
-        center: toLngLat(coordinates),
-        zoom: SELECTED_ZOOM,
-        duration: 600,
-      });
-    } else {
+    const syncCoordinates = () => {
+      if (coordinates && isFiniteNumber(coordinates.lat) && isFiniteNumber(coordinates.lng)) {
+        setMarkerPosition(map, maplibre, coordinates);
+        map.easeTo({
+          center: toLngLat(coordinates),
+          zoom: SELECTED_ZOOM,
+          duration: 600,
+        });
+        return;
+      }
+
+      markerCoordinatesRef.current = null;
       map.easeTo({
         center: toLngLat(DEFAULT_CENTER),
         zoom: DEFAULT_ZOOM,
@@ -377,7 +526,14 @@ function MapLibreCanvas({
         markerRef.current.remove();
         markerRef.current = null;
       }
+    };
+
+    if (!map.isStyleLoaded()) {
+      map.once("load", syncCoordinates);
+      return;
     }
+
+    syncCoordinates();
   }, [coordinates?.lat, coordinates?.lng]);
 
   return (

@@ -1,6 +1,7 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 if (typeof window !== "undefined") {
   throw new Error("firebase-admin must only be used in server-side code.");
@@ -37,4 +38,26 @@ function getAdminAuth() {
   return getAuth(getAdminApp());
 }
 
-export { getAdminDb, getAdminAuth };
+function normalizeStorageBucketName(value: string) {
+  return value
+    .trim()
+    .replace(/^gs:\/\//, "")
+    .replace(/^https?:\/\/[\w.-]+\//, "")
+    .replace(/\/$/, "");
+}
+
+function getAdminStorageBucket() {
+  const bucketName =
+    process.env.FIREBASE_STORAGE_BUCKET ||
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+    "";
+
+  if (!bucketName) {
+    throw new Error("Missing Firebase storage bucket environment variable.");
+  }
+
+  const normalizedBucket = normalizeStorageBucketName(bucketName);
+  return getStorage(getAdminApp()).bucket(normalizedBucket);
+}
+
+export { getAdminDb, getAdminAuth, getAdminStorageBucket };
