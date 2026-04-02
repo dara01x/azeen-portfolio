@@ -28,7 +28,6 @@ const PropertyDetail = () => {
 
   return (
     <div>
-      {/* Back + Actions Header */}
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild>
           <Link to="/properties"><ArrowLeft className="h-4 w-4" /></Link>
@@ -47,7 +46,6 @@ const PropertyDetail = () => {
         </Button>
       </div>
 
-      {/* Image Gallery Placeholder */}
       <Card className="mb-6 overflow-hidden">
         <div className="grid grid-cols-3 gap-0.5">
           <div className="col-span-2 row-span-2 bg-muted aspect-[16/10] flex items-center justify-center">
@@ -65,7 +63,6 @@ const PropertyDetail = () => {
         </div>
       </Card>
 
-      {/* Key Stats Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
           { icon: Maximize, label: "Area", value: `${property.area_size} m²` },
@@ -88,9 +85,7 @@ const PropertyDetail = () => {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Pricing */}
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Pricing</CardTitle></CardHeader>
             <CardContent>
@@ -105,7 +100,6 @@ const PropertyDetail = () => {
             </CardContent>
           </Card>
 
-          {/* Description */}
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Description</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -121,7 +115,6 @@ const PropertyDetail = () => {
             </CardContent>
           </Card>
 
-          {/* Building Info */}
           {(property.building_name || property.land_number) && (
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-base">Building Info</CardTitle></CardHeader>
@@ -134,7 +127,6 @@ const PropertyDetail = () => {
             </Card>
           )}
 
-          {/* Internal Notes */}
           {property.internal_notes && (
             <Card className="border-dashed">
               <CardHeader className="pb-3"><CardTitle className="text-base">Internal Notes</CardTitle></CardHeader>
@@ -143,13 +135,10 @@ const PropertyDetail = () => {
           )}
         </div>
 
-        {/* Right Column */}
         <div className="space-y-6">
-          {/* Location */}
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Location</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              {/* Map Placeholder */}
               <div className="aspect-[4/3] rounded-lg bg-muted flex items-center justify-center border">
                 <div className="text-center text-muted-foreground">
                   <MapPin className="h-6 w-6 mx-auto mb-1 opacity-40" />
@@ -165,7 +154,6 @@ const PropertyDetail = () => {
             </CardContent>
           </Card>
 
-          {/* Amenities */}
           {amenityNames.length > 0 && (
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-base">Amenities</CardTitle></CardHeader>
@@ -182,7 +170,6 @@ const PropertyDetail = () => {
             </Card>
           )}
 
-          {/* Relations */}
           {(projectName || clientName || property.assigned_company_id) && (
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-base">Relations</CardTitle></CardHeader>
