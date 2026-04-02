@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">azeen social preview</title>
+  <desc id="desc">Open graph image for azeen</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#14532d" />
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f766e" />
+      <stop offset="100%" stop-color="#22c55e" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <circle cx="1040" cy="120" r="180" fill="#34d399" fill-opacity="0.12" />
+  <circle cx="180" cy="540" r="220" fill="#2dd4bf" fill-opacity="0.1" />
+
+  <rect x="100" y="110" width="1000" height="410" rx="32" fill="#ffffff" fill-opacity="0.08" />
+  <rect x="140" y="160" width="140" height="140" rx="28" fill="url(#card)" />
+
+  <path d="M210 192l30 76h-16l-5-14h-17l-5 14h-16l29-76zM214 240l-7-20-7 20h14z" fill="#ffffff" />
+
+  <text x="320" y="245" font-size="88" font-family="Verdana, Geneva, sans-serif" font-weight="700" fill="#ffffff">azeen</text>
+  <text x="320" y="318" font-size="38" font-family="Verdana, Geneva, sans-serif" fill="#d1fae5">Web Application</text>
+  <text x="140" y="470" font-size="28" font-family="Verdana, Geneva, sans-serif" fill="#a7f3d0">Fast. Focused. Built for daily work.</text>
+</svg>
