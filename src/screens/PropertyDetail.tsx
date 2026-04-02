@@ -2,7 +2,17 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Edit, ImageIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  Bath,
+  BedDouble,
+  Building2,
+  Edit,
+  ImageIcon,
+  Layers3,
+  MapPin,
+  Ruler,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -29,7 +39,9 @@ const LocationPreviewMap = dynamic(
 const Field = ({ label, value }: { label: string; value?: string | number | null }) => (
   <div className="space-y-1">
     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-    <p className="text-sm font-medium">{value === null || value === undefined || value === "" ? "—" : value}</p>
+    <p className="text-sm font-medium break-words">
+      {value === null || value === undefined || value === "" ? "—" : value}
+    </p>
   </div>
 );
 
@@ -39,6 +51,16 @@ function findVariableName(items: AppVariableItem[], id?: string) {
   }
 
   return items.find((item) => item.id === id)?.name || id;
+}
+
+function formatEnumLabel(value?: string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 const PropertyDetail = () => {
@@ -141,119 +163,244 @@ const PropertyDetail = () => {
   const viewName = findVariableName(views, property.view_id);
   const amenityNames = property.amenities.map((amenityId) => findVariableName(amenities, amenityId));
   const listingTypeLabel = property.listing_type === "sale" ? "For Sale" : "For Rent";
-  const conditionLabel = property.condition.replace(/_/g, " ");
+  const conditionLabel = formatEnumLabel(property.condition);
+  const statusLabel = formatEnumLabel(property.status);
+  const paymentTypeLabel = formatEnumLabel(property.payment_type);
   const images = property.images.length > 0 ? property.images : property.main_image ? [property.main_image] : [];
   const mainImage = property.main_image || images[0];
+  const mainImageIndex = mainImage ? images.indexOf(mainImage) : -1;
+  const galleryImages = images.filter((_, index) => index !== mainImageIndex);
+  const priceLabel = `${property.currency} ${property.price.toLocaleString()}`;
   const coordinates =
     typeof property.lat === "number" && Number.isFinite(property.lat) && typeof property.lng === "number" && Number.isFinite(property.lng)
       ? { lat: property.lat, lng: property.lng }
       : null;
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-6">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start gap-3">
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild>
           <Link href="/properties"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight truncate">{property.title}</h1>
             <StatusBadge status={property.status} />
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">{typeName} · {listingTypeLabel} · {cityName}</p>
-          <p className="text-lg font-semibold mt-1">{property.currency} {property.price.toLocaleString()}</p>
+          <p className="text-sm text-muted-foreground mt-1">{typeName} · {listingTypeLabel} · {cityName}</p>
         </div>
+
         <Button asChild className="shrink-0">
           <Link href={`/properties/${id}/edit`}><Edit className="mr-2 h-4 w-4" />Edit Property</Link>
         </Button>
       </div>
 
-      {lookupError ? <p className="mb-4 text-sm text-destructive">{lookupError}</p> : null}
+      {lookupError ? <p className="text-sm text-destructive">{lookupError}</p> : null}
 
-      <div className="grid gap-6">
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Images</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
+      <Card className="overflow-hidden border-border/70 shadow-sm">
+        <div className="grid lg:grid-cols-[1.45fr_1fr]">
+          <div className="relative min-h-[18rem] bg-muted/30">
             {mainImage ? (
-              <img src={mainImage} alt={property.title} className="w-full aspect-[16/9] rounded-lg object-cover border" />
+              <img src={mainImage} alt={property.title} className="h-full w-full object-cover" />
             ) : (
-              <div className="w-full aspect-[16/9] rounded-lg border bg-muted/40 flex items-center justify-center text-muted-foreground">
+              <div className="h-full w-full flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
-                  <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">No main image</p>
+                  <ImageIcon className="h-9 w-9 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">No main image uploaded</p>
                 </div>
               </div>
             )}
 
-            {images.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {images.map((imageUrl, index) => (
-                  <img
-                    key={`${imageUrl}-${index}`}
-                    src={imageUrl}
-                    alt={`${property.title} gallery ${index + 1}`}
-                    className="w-full aspect-video rounded-md border object-cover"
-                  />
-                ))}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/45 to-transparent p-4 text-white">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <MapPin className="h-4 w-4" />
+                <span>{cityName}</span>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No gallery images uploaded.</p>
-            )}
+              <p className="text-xs text-white/85 mt-1">{property.area || "Area not specified"}</p>
+            </div>
+          </div>
+
+          <div className="p-6 bg-gradient-to-br from-background via-background to-muted/25">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Asking Price</p>
+            <p className="text-3xl font-bold leading-tight mt-1">{priceLabel}</p>
+
+            <div className="flex flex-wrap gap-2 mt-3">
+              <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
+                {listingTypeLabel}
+              </span>
+              <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
+                {statusLabel}
+              </span>
+              <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
+                {conditionLabel}
+              </span>
+            </div>
+
+            <Separator className="my-5" />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border bg-background/75 p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Bedrooms</p>
+                <p className="text-lg font-semibold mt-1">{property.bedrooms}</p>
+              </div>
+              <div className="rounded-lg border bg-background/75 p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Bathrooms</p>
+                <p className="text-lg font-semibold mt-1">{property.bathrooms}</p>
+              </div>
+              <div className="rounded-lg border bg-background/75 p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Area Size</p>
+                <p className="text-lg font-semibold mt-1">{property.area_size} m2</p>
+              </div>
+              <div className="rounded-lg border bg-background/75 p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Floors</p>
+                <p className="text-lg font-semibold mt-1">{property.floors}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {galleryImages.length > 0 ? (
+          <div className="border-t bg-muted/20 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Gallery</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {galleryImages.map((imageUrl, index) => (
+                <img
+                  key={`${imageUrl}-${index}`}
+                  src={imageUrl}
+                  alt={`${property.title} gallery ${index + 1}`}
+                  className="w-full aspect-video rounded-lg border object-cover"
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </Card>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="border-border/70">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Ruler className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-wide">Area Size</span>
+            </div>
+            <p className="text-lg font-semibold">{property.area_size} m2</p>
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Basic Info</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <Field label="Type" value={typeName} />
-              <Field label="Listing Type" value={listingTypeLabel} />
-              <Field label="Condition" value={conditionLabel} />
-              <Field label="Status" value={property.status} />
-            </CardContent>
-          </Card>
+        <Card className="border-border/70">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <BedDouble className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-wide">Bedrooms</span>
+            </div>
+            <p className="text-lg font-semibold">{property.bedrooms}</p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Pricing</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <Field label="Price" value={property.price.toLocaleString()} />
-              <Field label="Currency" value={property.currency} />
-              <Field label="Payment Type" value={property.payment_type} />
-              <Field label="Video URL" value={property.video_url} />
-            </CardContent>
-          </Card>
+        <Card className="border-border/70">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Bath className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-wide">Bathrooms</span>
+            </div>
+            <p className="text-lg font-semibold">{property.bathrooms}</p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Location</CardTitle></CardHeader>
+        <Card className="border-border/70">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Layers3 className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-wide">Floors</span>
+            </div>
+            <p className="text-lg font-semibold">{property.floors}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+        <div className="space-y-6">
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Location</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
               <LocationPreviewMap coordinates={coordinates} />
+
               <div className="grid grid-cols-2 gap-4">
                 <Field label="City" value={cityName} />
                 <Field label="Area" value={property.area} />
                 <Field label="Latitude" value={property.lat} />
                 <Field label="Longitude" value={property.lng} />
               </div>
+
               <Separator />
-              <div className="grid gap-4">
-                <Field label="Address (EN)" value={property.address_en} />
-                <Field label="Address (KU)" value={property.address_ku} />
-                <Field label="Address (AR)" value={property.address_ar} />
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Address (EN)</p>
+                  <p className="text-sm font-medium mt-1 break-words">{property.address_en || "—"}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Address (KU)</p>
+                  <p className="text-sm font-medium mt-1 break-words">{property.address_ku || "—"}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Address (AR)</p>
+                  <p className="text-sm font-medium mt-1 break-words">{property.address_ar || "—"}</p>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Details</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <Field label="Area Size (m2)" value={property.area_size} />
-              <Field label="Bedrooms" value={property.bedrooms} />
-              <Field label="Bathrooms" value={property.bathrooms} />
-              <Field label="Floors" value={property.floors} />
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Description</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">English</p>
+                <p className="text-sm mt-1 whitespace-pre-wrap">{property.description_en || "—"}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Kurdish</p>
+                <p className="text-sm mt-1 whitespace-pre-wrap">{property.description_ku || "—"}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Arabic</p>
+                <p className="text-sm mt-1 whitespace-pre-wrap">{property.description_ar || "—"}</p>
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Features</CardTitle></CardHeader>
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Internal Notes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{property.internal_notes || "—"}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-6">
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Overview</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-4">
+              <Field label="Type" value={typeName} />
+              <Field label="Listing Type" value={listingTypeLabel} />
+              <Field label="Status" value={statusLabel} />
+              <Field label="Condition" value={conditionLabel} />
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Features & Amenities</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
               <Field label="View" value={viewName} />
               <Separator />
@@ -277,8 +424,10 @@ const PropertyDetail = () => {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Building Info</CardTitle></CardHeader>
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Building Info</CardTitle>
+            </CardHeader>
             <CardContent className="grid grid-cols-2 gap-4">
               <Field label="Land Number" value={property.land_number} />
               <Field label="Total Floors" value={property.total_floors} />
@@ -287,28 +436,53 @@ const PropertyDetail = () => {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Description</CardTitle></CardHeader>
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Pricing & Media</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
-              <Field label="English" value={property.description_en} />
-              <Field label="Kurdish" value={property.description_ku} />
-              <Field label="Arabic" value={property.description_ar} />
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Price" value={property.price.toLocaleString()} />
+                <Field label="Currency" value={property.currency} />
+                <Field label="Payment Type" value={paymentTypeLabel} />
+                <Field label="Listing" value={listingTypeLabel} />
+              </div>
+
+              <Separator />
+
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Video URL</p>
+                {property.video_url ? (
+                  <a
+                    href={property.video_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-primary hover:underline break-all"
+                  >
+                    {property.video_url}
+                  </a>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No video attached.</p>
+                )}
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Relations</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label="Project" value={property.project_id} />
-              <Field label="Owner Client" value={property.owner_client_id} />
-              <Field label="Assigned Company" value={property.assigned_company_id} />
-            </CardContent>
-          </Card>
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Relations</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Building2 className="h-4 w-4" />
+                <span className="text-xs uppercase tracking-wide">Linked Records</span>
+              </div>
 
-          <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Internal Notes</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{property.internal_notes || "—"}</p>
+              <div className="grid gap-4">
+                <Field label="Project" value={property.project_id} />
+                <Field label="Owner Client" value={property.owner_client_id} />
+                <Field label="Assigned Company" value={property.assigned_company_id} />
+              </div>
             </CardContent>
           </Card>
         </div>
