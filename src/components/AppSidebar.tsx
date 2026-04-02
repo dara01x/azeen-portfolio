@@ -1,4 +1,4 @@
-import { useLocation, Link } from "react-router-dom";
+import Link from "next/link";
 import {
   Building2, FolderKanban, LayoutGrid, Users, UserCog, Settings, Database, BarChart3,
 } from "lucide-react";
@@ -30,7 +30,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="px-4 py-5">
-        <Link to="/" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 text-primary-foreground font-bold text-sm shadow-sm">
             A
           </div>
