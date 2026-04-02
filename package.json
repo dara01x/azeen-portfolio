@@ -49,6 +49,7 @@
     "firebase-admin": "^13.7.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
+    "maplibre-gl": "^5.21.1",
     "next": "^15.5.2",
     "next-themes": "^0.3.0",
     "react": "^18.3.1",

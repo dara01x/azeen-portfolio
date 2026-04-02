@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
@@ -10,16 +10,89 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { mockProperties, mockPropertyTypes, mockCities } from "@/data/mock";
+import { getProperties as fetchProperties } from "@/modules/properties/property.client";
+import { getVariables } from "@/modules/app-variables/appVariables.client";
+import { useAuth } from "@/lib/auth/useAuth";
+import type { Property } from "@/types";
+import type { AppVariableItem } from "@/modules/app-variables/types";
 
 const PropertiesList = () => {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
+  const [cities, setCities] = useState<AppVariableItem[]>([]);
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const filtered = mockProperties.filter((p) => {
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    setLoading(true);
+    setError(null);
+
+    fetchProperties()
+      .then((items) => {
+        if (!cancelled) {
+          setProperties(items);
+        }
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          const message = fetchError instanceof Error ? fetchError.message : "Failed to load properties.";
+          setError(message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let cancelled = false;
+    setLookupError(null);
+
+    Promise.all([getVariables("property_types"), getVariables("cities")])
+      .then(([types, citiesList]) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPropertyTypes(types);
+        setCities(citiesList);
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          const message = fetchError instanceof Error ? fetchError.message : "Failed to load filters.";
+          setLookupError(message);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  const filtered = properties.filter((p) => {
     if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
     if (cityFilter !== "all" && p.city_id !== cityFilter) return false;
     if (typeFilter !== "all" && p.type_id !== typeFilter) return false;
@@ -27,8 +100,8 @@ const PropertiesList = () => {
     return true;
   });
 
-  const getTypeName = (id: string) => mockPropertyTypes.find(t => t.id === id)?.name || "";
-  const getCityName = (id: string) => mockCities.find(c => c.id === id)?.name || "";
+  const getTypeName = (id: string) => propertyTypes.find((type) => type.id === id)?.name || id;
+  const getCityName = (id: string) => cities.find((city) => city.id === id)?.name || id;
 
   return (
     <div>
@@ -38,6 +111,7 @@ const PropertiesList = () => {
         actions={<Button asChild><Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link></Button>}
       />
       <Card className="p-1.5">
+        {lookupError ? <p className="px-3 pt-3 text-sm text-destructive">{lookupError}</p> : null}
         <div className="flex flex-wrap gap-2 p-3 pb-0">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -47,14 +121,14 @@ const PropertiesList = () => {
             <SelectTrigger className="w-[140px] h-9 bg-muted/50 border-0"><SelectValue placeholder="City" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Cities</SelectItem>
-              {mockCities.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              {cities.map((city) => <SelectItem key={city.id} value={city.id}>{city.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-[140px] h-9 bg-muted/50 border-0"><SelectValue placeholder="Type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Types</SelectItem>
-              {mockPropertyTypes.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+              {propertyTypes.map((type) => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -67,7 +141,15 @@ const PropertiesList = () => {
             </SelectContent>
           </Select>
         </div>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="p-6">
+            <p className="text-sm text-muted-foreground">Loading properties...</p>
+          </div>
+        ) : error ? (
+          <div className="p-6">
+            <EmptyState title="Failed to load properties" description={error} />
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="p-6">
             <EmptyState title="No properties found" description="Try adjusting your filters or add a new property." action={<Button asChild><Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link></Button>} />
           </div>

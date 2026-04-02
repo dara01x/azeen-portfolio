@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Providers from "./providers";
 import "../index.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 export const metadata: Metadata = {
   title: "azeen App",
