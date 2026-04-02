@@ -8,6 +8,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/lib/auth/useAuth";
 
 const mainNav = [
   { title: "Dashboard", url: "/", icon: BarChart3 },
@@ -25,7 +26,9 @@ const systemNav = [
 
 export function AppSidebar() {
   const { state } = useSidebar();
+  const { user } = useAuth();
   const collapsed = state === "collapsed";
+  const visibleMainNav = user?.role === "company" ? mainNav.filter((item) => item.url !== "/users") : mainNav;
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -48,7 +51,7 @@ export function AppSidebar() {
           <SidebarGroupLabel className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/70 px-4">Main</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNav.map((item) => (
+              {visibleMainNav.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink

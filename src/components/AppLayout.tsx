@@ -1,9 +1,15 @@
+"use client";
+
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Bell } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth/useAuth";
+import { logout } from "@/lib/auth/logout";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-background">
@@ -15,14 +21,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8">
                 <Bell className="h-4 w-4" />
               </Button>
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-8 w-8" onClick={() => logout()}>
+                <LogOut className="h-4 w-4" />
+              </Button>
               <div className="h-px w-px bg-border" />
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-xs font-semibold shadow-sm">
                   A
                 </div>
                 <div className="hidden sm:block">
-                  <p className="text-sm font-medium leading-none">Admin</p>
-                  <p className="text-xs text-muted-foreground">Owner</p>
+                  <p className="text-sm font-medium leading-none">{user?.full_name || "User"}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{user?.role || "Unknown"}</p>
                 </div>
               </div>
             </div>
