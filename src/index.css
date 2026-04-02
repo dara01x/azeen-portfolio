@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 220 20% 97%;
     --foreground: 224 71% 4%;
 
     --card: 0 0% 100%;
@@ -40,12 +40,12 @@
 
     --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 99%;
+    --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 224 71% 4%;
     --sidebar-primary: 239 84% 67%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 14% 96%;
-    --sidebar-accent-foreground: 224 71% 4%;
+    --sidebar-accent: 239 84% 97%;
+    --sidebar-accent-foreground: 239 84% 67%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 239 84% 67%;
   }
@@ -53,9 +53,9 @@
   .dark {
     --background: 224 71% 4%;
     --foreground: 210 20% 98%;
-    --card: 224 71% 4%;
+    --card: 222 47% 8%;
     --card-foreground: 210 20% 98%;
-    --popover: 224 71% 4%;
+    --popover: 222 47% 8%;
     --popover-foreground: 210 20% 98%;
     --primary: 239 84% 67%;
     --primary-foreground: 0 0% 100%;
@@ -90,6 +90,16 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer utilities {
+  .card-elevated {
+    @apply bg-card rounded-xl border shadow-sm hover:shadow-md transition-shadow duration-200;
+  }
+  .card-interactive {
+    @apply bg-card rounded-xl border shadow-sm hover:shadow-md hover:border-primary/20 transition-all duration-200 cursor-pointer;
   }
 }
