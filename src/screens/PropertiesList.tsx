@@ -3,19 +3,36 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { toast } from "@/components/ui/sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { getProperties as fetchProperties } from "@/modules/properties/property.client";
+import { deleteProperty as deletePropertyById, getProperties as fetchProperties } from "@/modules/properties/property.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
 import type { Property } from "@/types";
 import type { AppVariableItem } from "@/modules/app-variables/types";
+
+type DeleteDialogState = {
+  open: boolean;
+  propertyIds: string[];
+  subjectLabel: string;
+};
 
 const PropertiesList = () => {
   const router = useRouter();
@@ -31,6 +48,12 @@ const PropertiesList = () => {
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
+  const [deletingPropertyIds, setDeletingPropertyIds] = useState<string[]>([]);
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
+    open: false,
+    propertyIds: [],
+    subjectLabel: "",
+  });
 
   useEffect(() => {
     if (authLoading || !user) {
@@ -116,10 +139,28 @@ const PropertiesList = () => {
   const selectedIdSet = new Set(selectedPropertyIds);
   const filteredIds = filtered.map((property) => property.id);
   const filteredIdSet = new Set(filteredIds);
+  const deletingIdSet = new Set(deletingPropertyIds);
   const allFilteredSelected =
     filteredIds.length > 0 && filteredIds.every((id) => selectedIdSet.has(id));
   const someFilteredSelected =
     filteredIds.some((id) => selectedIdSet.has(id)) && !allFilteredSelected;
+  const dialogPropertyCount = deleteDialog.propertyIds.length;
+  const dialogIsDeleting = deleteDialog.propertyIds.some((id) => deletingIdSet.has(id));
+  const dialogIsBulkDelete = dialogPropertyCount > 1;
+
+  const deleteDialogTitle = dialogIsBulkDelete
+    ? `Delete ${dialogPropertyCount} Properties Permanently?`
+    : "Delete Property Permanently?";
+
+  const deleteDialogDescription = dialogIsBulkDelete
+    ? `This will remove ${dialogPropertyCount} selected properties from Firestore and delete all their uploaded images from Firebase Storage. This action cannot be undone.`
+    : `This will remove ${deleteDialog.subjectLabel ? `\"${deleteDialog.subjectLabel}\"` : "this property"} from Firestore and delete all uploaded images from Firebase Storage. This action cannot be undone.`;
+
+  const deleteActionLabel = dialogIsDeleting
+    ? "Deleting..."
+    : dialogIsBulkDelete
+      ? "Delete Selected"
+      : "Delete Property";
 
   const toggleSelectAllFiltered = (checked: boolean | "indeterminate") => {
     if (checked === true) {
@@ -143,6 +184,116 @@ const PropertiesList = () => {
       return current.filter((id) => id !== propertyId);
     });
   };
+
+  const markDeletingIds = (ids: string[]) => {
+    setDeletingPropertyIds((current) => Array.from(new Set([...current, ...ids])));
+  };
+
+  const unmarkDeletingIds = (ids: string[]) => {
+    const idsToRemove = new Set(ids);
+    setDeletingPropertyIds((current) => current.filter((id) => !idsToRemove.has(id)));
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteDialog({
+      open: false,
+      propertyIds: [],
+      subjectLabel: "",
+    });
+  };
+
+  const openDeleteDialog = (propertyIds: string[], subjectLabel = "") => {
+    if (propertyIds.length === 0) {
+      return;
+    }
+
+    setDeleteDialog({
+      open: true,
+      propertyIds: [...propertyIds],
+      subjectLabel,
+    });
+  };
+
+  async function deletePropertiesByIds(propertyIds: string[]) {
+    if (propertyIds.length === 0) {
+      return;
+    }
+
+    markDeletingIds(propertyIds);
+    setError(null);
+
+    try {
+      const results = await Promise.allSettled(propertyIds.map((propertyId) => deletePropertyById(propertyId)));
+
+      const deletedIds: string[] = [];
+      const failedIds: string[] = [];
+
+      results.forEach((result, index) => {
+        const propertyId = propertyIds[index];
+        if (result.status === "fulfilled") {
+          deletedIds.push(propertyId);
+        } else {
+          failedIds.push(propertyId);
+        }
+      });
+
+      if (deletedIds.length > 0) {
+        const deletedIdSet = new Set(deletedIds);
+        setProperties((current) => current.filter((item) => !deletedIdSet.has(item.id)));
+        setSelectedPropertyIds((current) => current.filter((id) => !deletedIdSet.has(id)));
+      }
+
+      if (failedIds.length > 0) {
+        const errorMessage =
+          failedIds.length === 1
+            ? "1 selected property could not be deleted."
+            : `${failedIds.length} selected properties could not be deleted.`;
+        setError(errorMessage);
+        toast.error(errorMessage, {
+          style: {
+            background: "hsl(var(--destructive))",
+            color: "hsl(var(--destructive-foreground))",
+            borderColor: "hsl(var(--destructive))",
+          },
+        });
+      }
+
+      if (deletedIds.length > 0) {
+        const successMessage =
+          deletedIds.length === 1
+            ? "1 property deleted successfully."
+            : `${deletedIds.length} properties deleted successfully.`;
+        toast.success(successMessage);
+      }
+    } finally {
+      unmarkDeletingIds(propertyIds);
+    }
+  }
+
+  const openSingleDeleteDialog = (property: Property) => {
+    if (deletingIdSet.has(property.id)) {
+      return;
+    }
+
+    openDeleteDialog([property.id], property.title);
+  };
+
+  const openSelectedDeleteDialog = () => {
+    if (selectedPropertyIds.length === 0) {
+      return;
+    }
+
+    openDeleteDialog(selectedPropertyIds);
+  };
+
+  async function handleConfirmDeleteDialog() {
+    if (dialogPropertyCount === 0 || dialogIsDeleting) {
+      return;
+    }
+
+    await deletePropertiesByIds([...deleteDialog.propertyIds]);
+    closeDeleteDialog();
+  }
 
   return (
     <div>
@@ -186,9 +337,20 @@ const PropertiesList = () => {
           <div className="px-3 pt-2">
             <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
               <p className="text-xs text-muted-foreground">{selectedPropertyIds.length} selected</p>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedPropertyIds([])}>
-                Clear selection
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={openSelectedDeleteDialog}
+                  disabled={selectedPropertyIds.some((id) => deletingIdSet.has(id))}
+                >
+                  {selectedPropertyIds.some((id) => deletingIdSet.has(id)) ? "Deleting..." : "Delete Selected"}
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedPropertyIds([])}>
+                  Clear selection
+                </Button>
+              </div>
             </div>
           </div>
         ) : null}
@@ -265,6 +427,18 @@ const PropertiesList = () => {
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="sm" className="h-7 text-xs" asChild onClick={e => e.stopPropagation()}><Link href={`/properties/${p.id}`}>View</Link></Button>
                       <Button variant="ghost" size="sm" className="h-7 text-xs" asChild onClick={e => e.stopPropagation()}><Link href={`/properties/${p.id}/edit`}>Edit</Link></Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openSingleDeleteDialog(p);
+                        }}
+                        disabled={deletingIdSet.has(p.id)}
+                      >
+                        {deletingIdSet.has(p.id) ? "Deleting..." : "Delete"}
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -273,6 +447,35 @@ const PropertiesList = () => {
           </Table>
         )}
       </Card>
+
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => {
+          if (!open && !dialogIsDeleting) {
+            closeDeleteDialog();
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteDialogTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{deleteDialogDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={dialogIsDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={dialogIsDeleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmDeleteDialog();
+              }}
+            >
+              {deleteActionLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

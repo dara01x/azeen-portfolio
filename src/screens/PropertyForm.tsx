@@ -4,6 +4,17 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +27,7 @@ import { ImageUpload } from "@/components/ImageUpload";
 import { toast } from "@/components/ui/sonner";
 import {
   createProperty,
+  deleteProperty,
   getPropertyById,
   updateProperty,
   uploadPropertyImageBlobUrls,
@@ -187,6 +199,8 @@ const PropertyForm = () => {
   const [loading, setLoading] = useState(isEdit);
   const [lookupsLoading, setLookupsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [propertyTypes, setPropertyTypes] = useState<PropertyType[]>([]);
@@ -321,6 +335,40 @@ const PropertyForm = () => {
       cancelled = true;
     };
   }, [authLoading, id, isEdit, user]);
+
+  async function handleDeleteProperty() {
+    if (!isEdit || !id || authLoading || !user || deleting) {
+      return;
+    }
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      await deleteProperty(id);
+
+      Object.keys(localImageFiles).forEach((imageUrl) => {
+        URL.revokeObjectURL(imageUrl);
+      });
+      setLocalImageFiles({});
+
+      setDeleteDialogOpen(false);
+      toast.success("Property deleted successfully.");
+      router.push("/properties");
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete property.";
+      setError(message);
+      toast.error(message, {
+        style: {
+          background: "hsl(var(--destructive))",
+          color: "hsl(var(--destructive-foreground))",
+          borderColor: "hsl(var(--destructive))",
+        },
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function handleSubmit() {
     if (authLoading || !user) {
@@ -471,8 +519,39 @@ const PropertyForm = () => {
           <p className="text-sm text-muted-foreground mt-0.5">Fill in the details below to {isEdit ? "update" : "create"} a property listing</p>
         </div>
         <div className="flex gap-2">
+          {isEdit ? (
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={saving || loading || deleting}>
+                  Delete Property
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Property Permanently?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove this property from Firestore and delete all uploaded images from Firebase
+                    Storage. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={deleting}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void handleDeleteProperty();
+                    }}
+                  >
+                    {deleting ? "Deleting..." : "Delete Property"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
           <Button variant="outline" asChild><Link href="/properties">Cancel</Link></Button>
-          <Button onClick={handleSubmit} disabled={saving || loading}>{saving ? "Saving..." : isEdit ? "Save Changes" : "Create Property"}</Button>
+          <Button onClick={handleSubmit} disabled={saving || loading || deleting}>{saving ? "Saving..." : isEdit ? "Save Changes" : "Create Property"}</Button>
         </div>
       </div>
 

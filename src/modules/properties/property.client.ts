@@ -88,6 +88,13 @@ export async function updateProperty(id: string, data: Omit<Property, "id">): Pr
   return payload.property as PropertyApiItem;
 }
 
+export async function deleteProperty(id: string): Promise<void> {
+  await authorizedJsonFetch("/api/properties/delete", {
+    method: "DELETE",
+    body: JSON.stringify({ id }),
+  });
+}
+
 export async function uploadPropertyImageBlobUrls(
   propertyId: string,
   imageBlobUrls: string[],

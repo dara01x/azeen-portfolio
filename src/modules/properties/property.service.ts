@@ -1,5 +1,5 @@
 import { Timestamp } from "firebase-admin/firestore";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminStorageBucket } from "@/lib/firebase/admin";
 import type { Property } from "@/types";
 
 type PropertyAddress = {
@@ -57,6 +57,125 @@ function asStringArray(value: unknown): string[] {
   }
 
   return value.filter((item): item is string => typeof item === "string");
+}
+
+function asUniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function safeDecodeURIComponent(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function tryParseStorageObjectPath(urlValue: string, bucketName: string): string | null {
+  const value = urlValue.trim();
+  if (!value) {
+    return null;
+  }
+
+  if (value.startsWith("gs://")) {
+    const withoutPrefix = value.slice("gs://".length);
+    const firstSlash = withoutPrefix.indexOf("/");
+    if (firstSlash <= 0) {
+      return null;
+    }
+
+    const parsedBucketName = withoutPrefix.slice(0, firstSlash);
+    if (parsedBucketName !== bucketName) {
+      return null;
+    }
+
+    return withoutPrefix.slice(firstSlash + 1);
+  }
+
+  try {
+    const parsedUrl = new URL(value);
+
+    if (parsedUrl.hostname === "firebasestorage.googleapis.com") {
+      const matched = parsedUrl.pathname.match(/^\/v0\/b\/([^/]+)\/o\/(.+)$/);
+      if (!matched) {
+        return null;
+      }
+
+      const parsedBucketName = safeDecodeURIComponent(matched[1]);
+      if (parsedBucketName !== bucketName) {
+        return null;
+      }
+
+      return safeDecodeURIComponent(matched[2]);
+    }
+
+    if (parsedUrl.hostname === "storage.googleapis.com") {
+      const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+      if (pathParts.length < 2) {
+        return null;
+      }
+
+      const parsedBucketName = pathParts[0];
+      if (parsedBucketName !== bucketName) {
+        return null;
+      }
+
+      return safeDecodeURIComponent(pathParts.slice(1).join("/"));
+    }
+
+    const storageHostSuffix = ".storage.googleapis.com";
+    if (parsedUrl.hostname.endsWith(storageHostSuffix)) {
+      const parsedBucketName = parsedUrl.hostname.slice(0, -storageHostSuffix.length);
+      if (parsedBucketName !== bucketName) {
+        return null;
+      }
+
+      return safeDecodeURIComponent(parsedUrl.pathname.replace(/^\/+/, ""));
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function isNotFoundStorageError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return message.includes("no such object") || message.includes("not found") || message.includes("404");
+}
+
+function extractPropertyImageUrls(data: Record<string, unknown>) {
+  const mainImage = asString(data.main_image);
+  const images = asStringArray(data.images);
+  return asUniqueStrings([...images, mainImage]);
+}
+
+async function deletePropertyStorageAssets(id: string, data: Record<string, unknown>) {
+  const bucket = getAdminStorageBucket();
+  const imageUrls = extractPropertyImageUrls(data);
+  const imageObjectPaths = asUniqueStrings(
+    imageUrls
+      .map((urlValue) => tryParseStorageObjectPath(urlValue, bucket.name) || "")
+      .filter(Boolean),
+  );
+
+  for (const objectPath of imageObjectPaths) {
+    try {
+      await bucket.file(objectPath).delete({ ignoreNotFound: true });
+    } catch (error) {
+      if (!isNotFoundStorageError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  try {
+    await bucket.deleteFiles({ prefix: `properties/${id}/`, force: true });
+  } catch (error) {
+    if (!isNotFoundStorageError(error)) {
+      throw error;
+    }
+  }
 }
 
 function isLocalPreviewUrl(value: string) {
@@ -286,4 +405,18 @@ export async function updateProperty(id: string, data: PropertyWriteInput): Prom
 
   const updatedDoc = await docRef.get();
   return mapDocToPropertyRecord(id, updatedDoc.data() || {});
+}
+
+export async function deleteProperty(id: string): Promise<void> {
+  const db = getAdminDb();
+  const docRef = db.collection("properties").doc(id);
+
+  const existingDoc = await docRef.get();
+  if (!existingDoc.exists) {
+    throw new Error("Property not found.");
+  }
+
+  const data = (existingDoc.data() || {}) as Record<string, unknown>;
+  await deletePropertyStorageAssets(id, data);
+  await docRef.delete();
 }
