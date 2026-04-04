@@ -42,6 +42,13 @@ type CoordinatesValue = {
 
 type LocalImageFileMap = Record<string, File>;
 
+const OWNERSHIP_TYPE_OPTIONS = [
+  { value: "freehold", label: "Freehold" },
+  { value: "leasehold", label: "Leasehold" },
+  { value: "power_of_attorney", label: "Power of Attorney" },
+  { value: "other", label: "Other" },
+] as const;
+
 function parseOptionalNumber(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -50,6 +57,24 @@ function parseOptionalNumber(value: string): number | undefined {
 
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parsePriceInput(value: string): number {
+  const digitsOnly = value.replace(/[^\d]/g, "");
+  if (!digitsOnly) {
+    return 0;
+  }
+
+  const parsed = Number(digitsOnly);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatPriceInput(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "";
+  }
+
+  return value.toLocaleString("en-US");
 }
 
 function normalizePhoneNumber(value: string): string {
@@ -106,6 +131,7 @@ const defaultProperty: Omit<Property, "id"> = {
   price: 0, currency: "USD", payment_type: "cash",
   city_id: "", area: "", address_en: "", address_ku: "", address_ar: "",
   area_size: 0, bedrooms: 0, bathrooms: 0, balconies: 0, floors: 1, condition: "new",
+  ownership_type: "",
   amenities: [], description_en: "", description_ku: "", description_ar: "",
   images: [], contact_name: "", primary_mobile_number: "", internal_notes: "",
 };
@@ -256,7 +282,7 @@ const PropertyForm = () => {
         secondary_mobile_number: normalizedSecondaryMobileNumber || undefined,
       };
 
-      if (!payload.title.trim()) {
+      if (!payload.title.trim() && !isEdit) {
         throw new Error("Property title is required.");
       }
 
@@ -396,29 +422,41 @@ const PropertyForm = () => {
       <div className="grid gap-6 max-w-4xl">
         <FormSection title="Basic Information" description="Core details about the property">
           <div className="grid gap-5 sm:grid-cols-2">
-            <div className="sm:col-span-2 space-y-2"><Label>Title</Label><Input value={form.title} onChange={e => update("title", e.target.value)} placeholder="e.g. Luxury Apartment in Downtown" /></div>
-            <div className="space-y-2"><Label>Type</Label>
+            {!isEdit ? (
+              <div className="sm:col-span-2 space-y-2"><Label>Title *</Label><Input value={form.title} onChange={e => update("title", e.target.value)} placeholder="e.g. Luxury Apartment in Downtown" /></div>
+            ) : null}
+            <div className="space-y-2"><Label>Type *</Label>
               <Select value={form.type_id} onValueChange={v => update("type_id", v)}>
                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>{propertyTypes.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Listing Type</Label>
+            <div className="space-y-2"><Label>Listing Type *</Label>
               <Select value={form.listing_type} onValueChange={v => update("listing_type", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="sale">Sale</SelectItem><SelectItem value="rent">Rent</SelectItem></SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Status</Label>
+            <div className="space-y-2"><Label>Status *</Label>
               <Select value={form.status} onValueChange={v => update("status", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="available">Available</SelectItem><SelectItem value="sold">Sold</SelectItem><SelectItem value="archived">Archived</SelectItem></SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Condition</Label>
+            <div className="space-y-2"><Label>Condition *</Label>
               <Select value={form.condition} onValueChange={v => update("condition", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="new">New</SelectItem><SelectItem value="used">Used</SelectItem><SelectItem value="under_construction">Under Construction</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2"><Label>Ownership Type (Optional)</Label>
+              <Select value={form.ownership_type || ""} onValueChange={v => update("ownership_type", v)}>
+                <SelectTrigger><SelectValue placeholder="Select ownership type" /></SelectTrigger>
+                <SelectContent>
+                  {OWNERSHIP_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
           </div>
@@ -426,14 +464,14 @@ const PropertyForm = () => {
 
         <FormSection title="Pricing" description="Set the price and payment terms">
           <div className="grid gap-5 sm:grid-cols-3">
-            <div className="space-y-2"><Label>Price</Label><Input type="number" min={0} value={form.price || ""} onChange={e => update("price", Math.max(0, Number(e.target.value) || 0))} placeholder="0" /></div>
-            <div className="space-y-2"><Label>Currency</Label>
+            <div className="space-y-2"><Label>Price *</Label><Input type="text" inputMode="numeric" value={formatPriceInput(form.price)} onChange={e => update("price", parsePriceInput(e.target.value))} placeholder="0" /></div>
+            <div className="space-y-2"><Label>Currency *</Label>
               <Select value={form.currency} onValueChange={v => update("currency", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="USD">USD</SelectItem><SelectItem value="IQD">IQD</SelectItem></SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Payment Type</Label>
+            <div className="space-y-2"><Label>Payment Type *</Label>
               <Select value={form.payment_type} onValueChange={v => update("payment_type", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="installment">Installment</SelectItem></SelectContent>
@@ -444,21 +482,21 @@ const PropertyForm = () => {
 
         <FormSection title="Location" description="Where is this property located?">
           <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2"><Label>City</Label>
+            <div className="space-y-2"><Label>City *</Label>
               <Select value={form.city_id} onValueChange={v => update("city_id", v)}>
                 <SelectTrigger><SelectValue placeholder="Select city" /></SelectTrigger>
                 <SelectContent>{cities.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Area</Label><Input value={form.area} onChange={e => update("area", e.target.value)} placeholder="e.g. Downtown" /></div>
+            <div className="space-y-2"><Label>Area (Optional)</Label><Input value={form.area} onChange={e => update("area", e.target.value)} placeholder="e.g. Downtown" /></div>
             <div className="sm:col-span-2">
-              <MultilingualInput label="Address" values={{ en: form.address_en, ku: form.address_ku, ar: form.address_ar }} onChange={v => { update("address_en", v.en); update("address_ku", v.ku); update("address_ar", v.ar); }} />
+              <MultilingualInput label="Address *" values={{ en: form.address_en, ku: form.address_ku, ar: form.address_ar }} onChange={v => { update("address_en", v.en); update("address_ku", v.ku); update("address_ar", v.ar); }} />
             </div>
             <Separator className="sm:col-span-2" />
-            <div className="space-y-2"><Label>Latitude</Label><Input type="number" step="any" value={form.lat ?? ""} onChange={e => update("lat", parseOptionalNumber(e.target.value))} placeholder="36.204824" /></div>
-            <div className="space-y-2"><Label>Longitude</Label><Input type="number" step="any" value={form.lng ?? ""} onChange={e => update("lng", parseOptionalNumber(e.target.value))} placeholder="44.009167" /></div>
+            <div className="space-y-2"><Label>Latitude (Optional)</Label><Input type="number" step="any" value={form.lat ?? ""} onChange={e => update("lat", parseOptionalNumber(e.target.value))} placeholder="36.204824" /></div>
+            <div className="space-y-2"><Label>Longitude (Optional)</Label><Input type="number" step="any" value={form.lng ?? ""} onChange={e => update("lng", parseOptionalNumber(e.target.value))} placeholder="44.009167" /></div>
             <div className="sm:col-span-2 space-y-2">
-              <Label>Map Location</Label>
+              <Label>Map Location (Optional)</Label>
               <LocationPickerMap
                 coordinates={selectedCoordinates}
                 onChange={(coordinates) => {
@@ -475,17 +513,17 @@ const PropertyForm = () => {
 
         <FormSection title="Property Details" description="Physical characteristics">
           <div className="grid gap-5 sm:grid-cols-4">
-            <div className="space-y-2"><Label>Area Size (m²)</Label><Input type="number" min={0} value={form.area_size || ""} onChange={e => update("area_size", Math.max(0, Number(e.target.value) || 0))} /></div>
-            <div className="space-y-2"><Label>Bedrooms</Label><Input type="number" min={0} value={form.bedrooms || ""} onChange={e => update("bedrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
-            <div className="space-y-2"><Label>Bathrooms</Label><Input type="number" min={0} value={form.bathrooms || ""} onChange={e => update("bathrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
-            <div className="space-y-2"><Label>Balconies</Label><Input type="number" min={0} value={form.balconies || ""} onChange={e => update("balconies", Math.max(0, Number(e.target.value) || 0))} /></div>
-            <div className="space-y-2"><Label>Floors</Label><Input type="number" min={0} value={form.floors || ""} onChange={e => update("floors", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Area Size (m²) *</Label><Input type="number" min={0} value={form.area_size || ""} onChange={e => update("area_size", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Bedrooms *</Label><Input type="number" min={0} value={form.bedrooms || ""} onChange={e => update("bedrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Bathrooms *</Label><Input type="number" min={0} value={form.bathrooms || ""} onChange={e => update("bathrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Balconies *</Label><Input type="number" min={0} value={form.balconies || ""} onChange={e => update("balconies", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Floors *</Label><Input type="number" min={0} value={form.floors || ""} onChange={e => update("floors", Math.max(0, Number(e.target.value) || 0))} /></div>
           </div>
         </FormSection>
 
         <FormSection title="Features & Amenities" description="What does this property offer?">
           <div className="space-y-5">
-            <div className="space-y-2"><Label>View</Label>
+            <div className="space-y-2"><Label>View (Optional)</Label>
               <Select value={form.view_id || ""} onValueChange={v => update("view_id", v)}>
                 <SelectTrigger className="sm:w-1/2"><SelectValue placeholder="Select view (optional)" /></SelectTrigger>
                 <SelectContent>{views.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}</SelectContent>
@@ -493,7 +531,7 @@ const PropertyForm = () => {
             </div>
             <Separator />
             <div>
-              <Label className="mb-3 block">Amenities</Label>
+              <Label className="mb-3 block">Amenities (Optional)</Label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {amenities.map(a => (
                   <label key={a.id} className="flex items-center gap-2.5 text-sm rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary/30 has-[:checked]:bg-primary/5">
@@ -510,22 +548,22 @@ const PropertyForm = () => {
 
         <FormSection title="Building Info" description="Building-specific details (optional)">
           <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2"><Label>Building Name</Label><Input value={form.building_name || ""} onChange={e => update("building_name", e.target.value)} /></div>
+            <div className="space-y-2"><Label>Building Name (Optional)</Label><Input value={form.building_name || ""} onChange={e => update("building_name", e.target.value)} /></div>
             <div className="space-y-2"><Label>Tower Number (Optional)</Label><Input value={form.tower_number || ""} onChange={e => update("tower_number", e.target.value)} /></div>
-            <div className="space-y-2"><Label>Land Number</Label><Input value={form.land_number || ""} onChange={e => update("land_number", e.target.value)} /></div>
-            <div className="space-y-2"><Label>Total Floors</Label><Input type="number" min={0} value={form.total_floors ?? ""} onChange={e => update("total_floors", parseOptionalNumber(e.target.value))} /></div>
-            <div className="space-y-2"><Label>Unit Floor Number</Label><Input type="number" min={0} value={form.unit_floor_number ?? ""} onChange={e => update("unit_floor_number", parseOptionalNumber(e.target.value))} /></div>
+            <div className="space-y-2"><Label>Land Number (Optional)</Label><Input value={form.land_number || ""} onChange={e => update("land_number", e.target.value)} /></div>
+            <div className="space-y-2"><Label>Total Floors (Optional)</Label><Input type="number" min={0} value={form.total_floors ?? ""} onChange={e => update("total_floors", parseOptionalNumber(e.target.value))} /></div>
+            <div className="space-y-2"><Label>Unit Floor Number (Optional)</Label><Input type="number" min={0} value={form.unit_floor_number ?? ""} onChange={e => update("unit_floor_number", parseOptionalNumber(e.target.value))} /></div>
           </div>
         </FormSection>
 
         <FormSection title="Description" description="Property description in multiple languages">
-          <MultilingualInput label="Description" multiline values={{ en: form.description_en, ku: form.description_ku, ar: form.description_ar }} onChange={v => { update("description_en", v.en); update("description_ku", v.ku); update("description_ar", v.ar); }} />
+          <MultilingualInput label="Description (Optional)" multiline values={{ en: form.description_en, ku: form.description_ku, ar: form.description_ar }} onChange={v => { update("description_en", v.en); update("description_ku", v.ku); update("description_ar", v.ar); }} />
         </FormSection>
 
         <FormSection title="Media" description="Upload images and add video links">
           <div className="space-y-5">
             <div>
-              <Label className="mb-3 block">Images</Label>
+              <Label className="mb-3 block">Images (Optional)</Label>
               <ImageUpload
                 images={form.images}
                 onLocalFilesAdded={(entries) => {
@@ -561,15 +599,15 @@ const PropertyForm = () => {
               />
             </div>
             <Separator />
-            <div className="space-y-2"><Label>Video URL (YouTube)</Label><Input value={form.video_url || ""} onChange={e => update("video_url", e.target.value)} placeholder="https://youtube.com/watch?v=..." /></div>
+            <div className="space-y-2"><Label>Video URL (YouTube) (Optional)</Label><Input value={form.video_url || ""} onChange={e => update("video_url", e.target.value)} placeholder="https://youtube.com/watch?v=..." /></div>
           </div>
         </FormSection>
 
         <FormSection title="Relations" description="Link this property with related records by their document IDs">
           <div className="grid gap-5 sm:grid-cols-3">
-            <div className="space-y-2"><Label>Project ID</Label><Input value={form.project_id || ""} onChange={e => update("project_id", e.target.value)} placeholder="Optional" /></div>
-            <div className="space-y-2"><Label>Owner Client ID</Label><Input value={form.owner_client_id || ""} onChange={e => update("owner_client_id", e.target.value)} placeholder="Optional" /></div>
-            <div className="space-y-2"><Label>Assigned Company ID</Label><Input value={form.assigned_company_id || ""} onChange={e => update("assigned_company_id", e.target.value)} placeholder="Optional" /></div>
+            <div className="space-y-2"><Label>Project ID (Optional)</Label><Input value={form.project_id || ""} onChange={e => update("project_id", e.target.value)} placeholder="Optional" /></div>
+            <div className="space-y-2"><Label>Owner Client ID (Optional)</Label><Input value={form.owner_client_id || ""} onChange={e => update("owner_client_id", e.target.value)} placeholder="Optional" /></div>
+            <div className="space-y-2"><Label>Assigned Company ID (Optional)</Label><Input value={form.assigned_company_id || ""} onChange={e => update("assigned_company_id", e.target.value)} placeholder="Optional" /></div>
           </div>
         </FormSection>
 
@@ -577,7 +615,7 @@ const PropertyForm = () => {
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2"><Label>Contact Name *</Label><Input value={form.contact_name} onChange={e => update("contact_name", e.target.value)} placeholder="Enter contact person name" /></div>
             <div className="space-y-2"><Label>Primary Mobile Number *</Label><Input value={form.primary_mobile_number} onChange={e => update("primary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
-            <div className="space-y-2 sm:col-span-2"><Label>Secondary Mobile Number</Label><Input value={form.secondary_mobile_number || ""} onChange={e => update("secondary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
+            <div className="space-y-2 sm:col-span-2"><Label>Secondary Mobile Number (Optional)</Label><Input value={form.secondary_mobile_number || ""} onChange={e => update("secondary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
           </div>
         </FormSection>
 

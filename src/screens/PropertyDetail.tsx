@@ -166,6 +166,7 @@ const PropertyDetail = () => {
   const conditionLabel = formatEnumLabel(property.condition);
   const statusLabel = formatEnumLabel(property.status);
   const paymentTypeLabel = formatEnumLabel(property.payment_type);
+  const ownershipTypeLabel = formatEnumLabel(property.ownership_type);
   const images = property.images.length > 0 ? property.images : property.main_image ? [property.main_image] : [];
   const mainImage = property.main_image || images[0];
   const mainImageIndex = mainImage ? images.indexOf(mainImage) : -1;
@@ -404,6 +405,7 @@ const PropertyDetail = () => {
               <Field label="Listing Type" value={listingTypeLabel} />
               <Field label="Status" value={statusLabel} />
               <Field label="Condition" value={conditionLabel} />
+              <Field label="Ownership Type" value={ownershipTypeLabel} />
             </CardContent>
           </Card>
 

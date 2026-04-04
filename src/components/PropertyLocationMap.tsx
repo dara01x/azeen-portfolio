@@ -19,6 +19,10 @@ const DEFAULT_ZOOM = 12;
 const SELECTED_ZOOM = 15;
 const CURRENT_LOCATION_ZOOM = 16;
 const DEFAULT_STYLE_ID = "street";
+const GEOLOCATION_TIMEOUT_MS = 7000;
+const GEOLOCATION_MAX_AGE_MS = 300000;
+const GEOLOCATION_RETRY_DELAY_MS = 500;
+const GEOLOCATION_WATCHDOG_MS = 900;
 
 type BaseStyleOption = {
   id: string;
@@ -278,8 +282,8 @@ function MapLibreCanvas({
         const geolocateControl = new maplibre.GeolocateControl({
           positionOptions: {
             enableHighAccuracy: false,
-            timeout: 20000,
-            maximumAge: 60000,
+            timeout: GEOLOCATION_TIMEOUT_MS,
+            maximumAge: GEOLOCATION_MAX_AGE_MS,
           },
           trackUserLocation: false,
           showUserLocation: false,
@@ -347,13 +351,13 @@ function MapLibreCanvas({
                 clearGeolocateRetryTimer();
                 geolocateRetryTimer = setTimeout(() => {
                   runFallbackLocate(attempt + 1);
-                }, 1200);
+                }, GEOLOCATION_RETRY_DELAY_MS);
               }
             },
             {
               enableHighAccuracy: false,
-              timeout: 20000,
-              maximumAge: 60000,
+              timeout: GEOLOCATION_TIMEOUT_MS,
+              maximumAge: GEOLOCATION_MAX_AGE_MS,
             },
           );
         };
@@ -377,7 +381,7 @@ function MapLibreCanvas({
             // CoreLocation unknown is often transient; retry shortly with relaxed settings.
             geolocateRetryTimer = setTimeout(() => {
               runFallbackLocate();
-            }, 900);
+            }, GEOLOCATION_RETRY_DELAY_MS);
 
             return;
           }
@@ -394,9 +398,10 @@ function MapLibreCanvas({
 
         const handleGeolocateButtonClick = () => {
           clearGeolocateWatchdogTimer();
+          runFallbackLocate();
           geolocateWatchdogTimer = setTimeout(() => {
             runFallbackLocate();
-          }, 2500);
+          }, GEOLOCATION_WATCHDOG_MS);
         };
 
         geolocateButton?.addEventListener("click", handleGeolocateButtonClick);

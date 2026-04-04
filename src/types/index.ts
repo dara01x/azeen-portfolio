@@ -66,6 +66,7 @@ export interface Property {
   balconies: number;
   floors: number;
   condition: "new" | "used" | "under_construction";
+  ownership_type?: string;
   amenities: string[];
   view_id?: string;
   land_number?: string;
