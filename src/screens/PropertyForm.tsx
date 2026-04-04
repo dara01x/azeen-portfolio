@@ -19,9 +19,11 @@ import {
   updateProperty,
   uploadPropertyImageBlobUrls,
 } from "@/modules/properties/property.client";
+import { getProjects } from "@/modules/projects/project.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
-import type { Amenity, City, Property, PropertyType, ViewType } from "@/types";
+import { mockClients, mockUsers } from "@/data/mock";
+import type { Amenity, City, Client, Project, Property, PropertyType, User, ViewType } from "@/types";
 
 const LocationPickerMap = dynamic(
   () => import("@/components/PropertyLocationMap").then((mod) => mod.PropertyLocationPickerMap),
@@ -48,6 +50,8 @@ const OWNERSHIP_TYPE_OPTIONS = [
   { value: "power_of_attorney", label: "Power of Attorney" },
   { value: "other", label: "Other" },
 ] as const;
+
+const OPTIONAL_LINK_NONE = "__none__";
 
 function parseOptionalNumber(value: string): number | undefined {
   const trimmed = value.trim();
@@ -143,6 +147,14 @@ function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   return { uploadedImages, localBlobImages };
 }
 
+function hasOptionById(items: Array<{ id: string }>, id?: string) {
+  if (!id) {
+    return false;
+  }
+
+  return items.some((item) => item.id === id);
+}
+
 const defaultProperty: Omit<Property, "id"> = {
   title: "", type_id: "", listing_type: "sale", status: "available",
   price: 0, currency: "USD", payment_type: "cash",
@@ -180,6 +192,9 @@ const PropertyForm = () => {
   const [cities, setCities] = useState<City[]>([]);
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [views, setViews] = useState<ViewType[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [clients] = useState<Client[]>(mockClients);
+  const [companies] = useState<User[]>(() => mockUsers.filter((item) => item.role === "company"));
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(prev => ({ ...prev, [key]: value }));
   const selectedCoordinates = useMemo<CoordinatesValue | null>(() => {
@@ -224,6 +239,32 @@ const PropertyForm = () => {
       .finally(() => {
         if (!cancelled) {
           setLookupsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    getProjects()
+      .then((items) => {
+        if (!cancelled) {
+          setProjects(items as Project[]);
+        }
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          const message = fetchError instanceof Error ? fetchError.message : "Failed to load projects.";
+          setLookupError((prev) => prev || message);
+          setProjects([]);
         }
       });
 
@@ -636,9 +677,70 @@ const PropertyForm = () => {
 
         <FormSection title="Relations" description="Link this property with related records by their document IDs">
           <div className="grid gap-5 sm:grid-cols-3">
-            <div className="space-y-2"><Label>Project ID (Optional)</Label><Input value={form.project_id || ""} onChange={e => update("project_id", e.target.value)} placeholder="Optional" /></div>
-            <div className="space-y-2"><Label>Owner Client ID (Optional)</Label><Input value={form.owner_client_id || ""} onChange={e => update("owner_client_id", e.target.value)} placeholder="Optional" /></div>
-            <div className="space-y-2"><Label>Assigned Company ID (Optional)</Label><Input value={form.assigned_company_id || ""} onChange={e => update("assigned_company_id", e.target.value)} placeholder="Optional" /></div>
+            <div className="space-y-2">
+              <Label>Project (Optional)</Label>
+              <Select
+                value={form.project_id || OPTIONAL_LINK_NONE}
+                onValueChange={(value) => update("project_id", value === OPTIONAL_LINK_NONE ? undefined : value)}
+              >
+                <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={OPTIONAL_LINK_NONE}>None</SelectItem>
+                  {!hasOptionById(projects, form.project_id) && form.project_id ? (
+                    <SelectItem value={form.project_id}>Current: {form.project_id}</SelectItem>
+                  ) : null}
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>{project.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Owner Client (Optional)</Label>
+              <Select
+                value={form.owner_client_id || OPTIONAL_LINK_NONE}
+                onValueChange={(value) =>
+                  update("owner_client_id", value === OPTIONAL_LINK_NONE ? undefined : value)
+                }
+              >
+                <SelectTrigger><SelectValue placeholder="Select owner client" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={OPTIONAL_LINK_NONE}>None</SelectItem>
+                  {!hasOptionById(clients, form.owner_client_id) && form.owner_client_id ? (
+                    <SelectItem value={form.owner_client_id}>Current: {form.owner_client_id}</SelectItem>
+                  ) : null}
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.full_name} - {client.primary_phone}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Assigned Company (Optional)</Label>
+              <Select
+                value={form.assigned_company_id || OPTIONAL_LINK_NONE}
+                onValueChange={(value) =>
+                  update("assigned_company_id", value === OPTIONAL_LINK_NONE ? undefined : value)
+                }
+              >
+                <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={OPTIONAL_LINK_NONE}>None</SelectItem>
+                  {!hasOptionById(companies, form.assigned_company_id) && form.assigned_company_id ? (
+                    <SelectItem value={form.assigned_company_id}>Current: {form.assigned_company_id}</SelectItem>
+                  ) : null}
+                  {companies.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.company_name || company.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </FormSection>
 
