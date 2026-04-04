@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { MultilingualInput } from "@/components/MultilingualInput";
 import { ImageUpload } from "@/components/ImageUpload";
+import { toast } from "@/components/ui/sonner";
 import {
   createProperty,
   getPropertyById,
@@ -121,7 +122,16 @@ function isValidPhoneNumber(value: string): boolean {
 function isValidCoordinates(lat?: number, lng?: number): boolean {
   const hasLat = typeof lat === "number" && Number.isFinite(lat);
   const hasLng = typeof lng === "number" && Number.isFinite(lng);
-  return (!hasLat && !hasLng) || (hasLat && hasLng);
+
+  if (!hasLat && !hasLng) {
+    return true;
+  }
+
+  if (!hasLat || !hasLng) {
+    return false;
+  }
+
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
 function hasNegativeNumber(value: number | undefined): boolean {
@@ -383,7 +393,9 @@ const PropertyForm = () => {
       }
 
       if (!isValidCoordinates(payload.lat, payload.lng)) {
-        throw new Error("Coordinates must be empty or include valid latitude and longitude.");
+        throw new Error(
+          "Coordinates must be empty, or use latitude between -90 and 90 and longitude between -180 and 180.",
+        );
       }
 
       const hasTotalFloors =
@@ -459,6 +471,13 @@ const PropertyForm = () => {
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Failed to save property.";
       setError(message);
+      toast.error(message, {
+        style: {
+          background: "hsl(var(--destructive))",
+          color: "hsl(var(--destructive-foreground))",
+          borderColor: "hsl(var(--destructive))",
+        },
+      });
     } finally {
       setSaving(false);
     }

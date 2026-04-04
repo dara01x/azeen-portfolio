@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MutableRefObject } from "react";
+import { toast } from "@/components/ui/sonner";
 
 type MapLibreModule = typeof import("maplibre-gl");
 type MapLibreMap = import("maplibre-gl").Map;
@@ -101,6 +102,24 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function isValidLatitude(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= -90 && value <= 90;
+}
+
+function isValidLongitude(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= -180 && value <= 180;
+}
+
+function isValidMapCoordinates(
+  coordinates: PropertyCoordinates | null | undefined,
+): coordinates is PropertyCoordinates {
+  if (!coordinates) {
+    return false;
+  }
+
+  return isValidLatitude(coordinates.lat) && isValidLongitude(coordinates.lng);
+}
+
 function toLngLat(coordinates: PropertyCoordinates): [number, number] {
   return [coordinates.lng, coordinates.lat];
 }
@@ -199,21 +218,49 @@ function MapLibreCanvas({
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const styleIdRef = useRef(DEFAULT_STYLE_ID);
   const onChangeRef = useRef(onChange);
+  const lastCoordinateErrorRef = useRef<string | null>(null);
+
+  const raiseInvalidCoordinateAlarm = (nextCoordinates: PropertyCoordinates) => {
+    const key = `${nextCoordinates.lat}:${nextCoordinates.lng}`;
+    if (lastCoordinateErrorRef.current === key) {
+      return;
+    }
+
+    lastCoordinateErrorRef.current = key;
+
+    toast.error(
+      "Invalid map coordinates: latitude must be between -90 and 90, and longitude between -180 and 180.",
+      {
+        style: {
+          background: "hsl(var(--destructive))",
+          color: "hsl(var(--destructive-foreground))",
+          borderColor: "hsl(var(--destructive))",
+        },
+      },
+    );
+  };
 
   const setMarkerPosition = (
     map: MapLibreMap,
     maplibre: MapLibreModule,
     nextCoordinates: PropertyCoordinates,
   ) => {
+    if (!isValidMapCoordinates(nextCoordinates)) {
+      raiseInvalidCoordinateAlarm(nextCoordinates);
+      return false;
+    }
+
+    lastCoordinateErrorRef.current = null;
     const nextLngLat = toLngLat(nextCoordinates);
     markerCoordinatesRef.current = nextCoordinates;
 
     if (!markerRef.current) {
       markerRef.current = new maplibre.Marker({ color: MARKER_COLOR }).setLngLat(nextLngLat).addTo(map);
-      return;
+      return true;
     }
 
     markerRef.current.setLngLat(nextLngLat);
+    return true;
   };
 
   useEffect(() => {
@@ -237,7 +284,12 @@ function MapLibreCanvas({
 
       maplibreRef.current = maplibre;
 
-      const center = coordinates ?? DEFAULT_CENTER;
+      const center = isValidMapCoordinates(coordinates) ? coordinates : DEFAULT_CENTER;
+
+      if (coordinates && !isValidMapCoordinates(coordinates)) {
+        raiseInvalidCoordinateAlarm(coordinates);
+      }
+
       const map = new maplibre.Map({
         container,
         style: getBaseStyle(styleIdRef.current).style,
@@ -511,12 +563,28 @@ function MapLibreCanvas({
 
     const syncCoordinates = () => {
       if (coordinates && isFiniteNumber(coordinates.lat) && isFiniteNumber(coordinates.lng)) {
-        setMarkerPosition(map, maplibre, coordinates);
+        const markerWasSet = setMarkerPosition(map, maplibre, coordinates);
+        if (markerWasSet) {
+          map.easeTo({
+            center: toLngLat(coordinates),
+            zoom: SELECTED_ZOOM,
+            duration: 600,
+          });
+          return;
+        }
+
+        markerCoordinatesRef.current = null;
         map.easeTo({
-          center: toLngLat(coordinates),
-          zoom: SELECTED_ZOOM,
+          center: toLngLat(DEFAULT_CENTER),
+          zoom: DEFAULT_ZOOM,
           duration: 600,
         });
+
+        if (markerRef.current) {
+          markerRef.current.remove();
+          markerRef.current = null;
+        }
+
         return;
       }
 
