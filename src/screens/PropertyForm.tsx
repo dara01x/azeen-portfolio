@@ -350,19 +350,7 @@ const PropertyForm = () => {
         throw new Error("City is required.");
       }
 
-      if (!payload.address_en.trim() || !payload.address_ku.trim() || !payload.address_ar.trim()) {
-        throw new Error("All address fields are required.");
-      }
-
-      if (!payload.contact_name) {
-        throw new Error("Contact name is required.");
-      }
-
-      if (!payload.primary_mobile_number) {
-        throw new Error("Primary mobile number is required.");
-      }
-
-      if (!isValidPhoneNumber(payload.primary_mobile_number)) {
+      if (payload.primary_mobile_number && !isValidPhoneNumber(payload.primary_mobile_number)) {
         throw new Error("Primary mobile number is invalid.");
       }
 
@@ -567,7 +555,7 @@ const PropertyForm = () => {
             </div>
             <div className="space-y-2"><Label>Area (Optional)</Label><Input value={form.area} onChange={e => update("area", e.target.value)} placeholder="e.g. Downtown" /></div>
             <div className="sm:col-span-2">
-              <MultilingualInput label="Address *" values={{ en: form.address_en, ku: form.address_ku, ar: form.address_ar }} onChange={v => { update("address_en", v.en); update("address_ku", v.ku); update("address_ar", v.ar); }} />
+              <MultilingualInput label="Address (Optional)" values={{ en: form.address_en, ku: form.address_ku, ar: form.address_ar }} onChange={v => { update("address_en", v.en); update("address_ku", v.ku); update("address_ar", v.ar); }} />
             </div>
             <Separator className="sm:col-span-2" />
             <div className="space-y-2"><Label>Latitude (Optional)</Label><Input type="number" step="any" value={form.lat ?? ""} onChange={e => update("lat", parseOptionalNumber(e.target.value))} placeholder="36.204824" /></div>
@@ -591,10 +579,10 @@ const PropertyForm = () => {
         <FormSection title="Property Details" description="Physical characteristics">
           <div className="grid gap-5 sm:grid-cols-4">
             <div className="space-y-2"><Label>Area Size (m²) *</Label><Input type="number" min={0} value={form.area_size || ""} onChange={e => update("area_size", Math.max(0, Number(e.target.value) || 0))} /></div>
-            <div className="space-y-2"><Label>Bedrooms *</Label><Input type="number" min={0} value={form.bedrooms || ""} onChange={e => update("bedrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
-            <div className="space-y-2"><Label>Bathrooms *</Label><Input type="number" min={0} value={form.bathrooms || ""} onChange={e => update("bathrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
-            <div className="space-y-2"><Label>Balconies *</Label><Input type="number" min={0} value={form.balconies || ""} onChange={e => update("balconies", Math.max(0, Number(e.target.value) || 0))} /></div>
-            <div className="space-y-2"><Label>Property Floors *</Label><Input type="number" min={0} value={form.floors || ""} onChange={e => update("floors", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Bedrooms (Optional)</Label><Input type="number" min={0} value={form.bedrooms || ""} onChange={e => update("bedrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Bathrooms (Optional)</Label><Input type="number" min={0} value={form.bathrooms || ""} onChange={e => update("bathrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Balconies (Optional)</Label><Input type="number" min={0} value={form.balconies || ""} onChange={e => update("balconies", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Property Floors (Optional)</Label><Input type="number" min={0} value={form.floors || ""} onChange={e => update("floors", Math.max(0, Number(e.target.value) || 0))} /></div>
           </div>
         </FormSection>
 
@@ -754,8 +742,8 @@ const PropertyForm = () => {
 
         <FormSection title="Contact Information" description="Owner or agent contact details">
           <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2"><Label>Contact Name *</Label><Input value={form.contact_name} onChange={e => update("contact_name", e.target.value)} placeholder="Enter contact person name" /></div>
-            <div className="space-y-2"><Label>Primary Mobile Number *</Label><Input value={form.primary_mobile_number} onChange={e => update("primary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
+            <div className="space-y-2"><Label>Contact Name (Optional)</Label><Input value={form.contact_name} onChange={e => update("contact_name", e.target.value)} placeholder="Enter contact person name" /></div>
+            <div className="space-y-2"><Label>Primary Mobile Number (Optional)</Label><Input value={form.primary_mobile_number} onChange={e => update("primary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
             <div className="space-y-2 sm:col-span-2"><Label>Secondary Mobile Number (Optional)</Label><Input value={form.secondary_mobile_number || ""} onChange={e => update("secondary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
           </div>
         </FormSection>
