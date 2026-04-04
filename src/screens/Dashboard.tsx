@@ -1,51 +1,84 @@
+import { useEffect, useState } from "react";
 import { Building2, TrendingUp, Users, FolderKanban, ArrowUpRight, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-import { mockProperties, mockProjects, mockClients, mockUnits, mockPropertyTypes, mockCities } from "@/data/mock";
+import { useAuth } from "@/lib/auth/useAuth";
+import { getProjects } from "@/modules/projects/project.client";
+import { mockProperties, mockClients, mockUnits, mockPropertyTypes, mockCities } from "@/data/mock";
 import { PageHeader } from "@/components/PageHeader";
-
-const stats = [
-  {
-    label: "Total Properties",
-    value: mockProperties.length,
-    icon: Building2,
-    change: "+2 this month",
-    gradient: "from-primary/10 to-primary/5",
-    iconBg: "bg-primary/10 text-primary",
-    href: "/properties",
-  },
-  {
-    label: "Active Projects",
-    value: mockProjects.filter(p => p.status === "active").length,
-    icon: FolderKanban,
-    change: "All on track",
-    gradient: "from-emerald-50 to-emerald-50/50",
-    iconBg: "bg-emerald-100 text-emerald-600",
-    href: "/projects",
-  },
-  {
-    label: "Available Units",
-    value: mockUnits.filter(u => u.status === "available").length,
-    icon: TrendingUp,
-    change: `of ${mockUnits.length} total`,
-    gradient: "from-amber-50 to-amber-50/50",
-    iconBg: "bg-amber-100 text-amber-600",
-    href: "/units",
-  },
-  {
-    label: "Active Clients",
-    value: mockClients.filter(c => c.status === "active").length,
-    icon: Users,
-    change: `${mockClients.length} total`,
-    gradient: "from-violet-50 to-violet-50/50",
-    iconBg: "bg-violet-100 text-violet-600",
-    href: "/clients",
-  },
-];
+import type { Project } from "@/types";
 
 const Dashboard = () => {
+  const { user, loading: authLoading } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    getProjects()
+      .then((items) => {
+        if (!cancelled) {
+          setProjects(items as Project[]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProjects([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  const activeProjects = projects.filter((project) => project.status === "active");
+
+  const stats = [
+    {
+      label: "Total Properties",
+      value: mockProperties.length,
+      icon: Building2,
+      change: "+2 this month",
+      gradient: "from-primary/10 to-primary/5",
+      iconBg: "bg-primary/10 text-primary",
+      href: "/properties",
+    },
+    {
+      label: "Active Projects",
+      value: activeProjects.length,
+      icon: FolderKanban,
+      change: "All on track",
+      gradient: "from-emerald-50 to-emerald-50/50",
+      iconBg: "bg-emerald-100 text-emerald-600",
+      href: "/projects",
+    },
+    {
+      label: "Available Units",
+      value: mockUnits.filter((u) => u.status === "available").length,
+      icon: TrendingUp,
+      change: `of ${mockUnits.length} total`,
+      gradient: "from-amber-50 to-amber-50/50",
+      iconBg: "bg-amber-100 text-amber-600",
+      href: "/units",
+    },
+    {
+      label: "Active Clients",
+      value: mockClients.filter((c) => c.status === "active").length,
+      icon: Users,
+      change: `${mockClients.length} total`,
+      gradient: "from-violet-50 to-violet-50/50",
+      iconBg: "bg-violet-100 text-violet-600",
+      href: "/clients",
+    },
+  ];
+
   const getTypeName = (id: string) => mockPropertyTypes.find(t => t.id === id)?.name || "";
   const getCityName = (id: string) => mockCities.find(c => c.id === id)?.name || "";
 
@@ -117,7 +150,7 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y">
-                {mockProjects.filter(p => p.status === "active").map((p) => (
+                {activeProjects.map((p) => (
                   <Link href={`/projects/${p.id}/edit`} key={p.id} className="flex items-center justify-between px-6 py-3 hover:bg-muted/50 transition-colors">
                     <div>
                       <p className="text-sm font-medium">{p.title}</p>
@@ -126,7 +159,13 @@ const Dashboard = () => {
                     <div className="h-2 w-16 rounded-full bg-muted overflow-hidden">
                       <div
                         className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${((p.total_units - p.available_units) / p.total_units) * 100}%` }}
+                        style={{
+                          width: `${
+                            p.total_units > 0
+                              ? ((p.total_units - p.available_units) / p.total_units) * 100
+                              : 0
+                          }%`,
+                        }}
                       />
                     </div>
                   </Link>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -9,8 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ImageUpload } from "@/components/ImageUpload";
-import { mockUnits, mockProjects, mockPropertyTypes } from "@/data/mock";
-import type { Unit } from "@/types";
+import { useAuth } from "@/lib/auth/useAuth";
+import { getProjects } from "@/modules/projects/project.client";
+import { mockUnits, mockPropertyTypes } from "@/data/mock";
+import type { Project, Unit } from "@/types";
 
 const defaultUnit: Omit<Unit, "id"> = {
   project_id: "", title: "", type_id: "", status: "available",
@@ -28,12 +30,38 @@ const FormSection = ({ title, description, children }: { title: string; descript
 const UnitForm = () => {
   const params = useParams<{ id?: string }>();
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const paramId = params?.id;
   const id = Array.isArray(paramId) ? paramId[0] : paramId;
   const isEdit = !!id && id !== "new";
   const existing = isEdit ? mockUnits.find(u => u.id === id) : undefined;
   const [form, setForm] = useState<Omit<Unit, "id">>(existing ? { ...existing } : defaultUnit);
+  const [projects, setProjects] = useState<Project[]>([]);
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(prev => ({ ...prev, [key]: value }));
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    getProjects()
+      .then((items) => {
+        if (!cancelled) {
+          setProjects(items as Project[]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProjects([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
 
   return (
     <div>
@@ -54,7 +82,7 @@ const UnitForm = () => {
             <div className="space-y-2"><Label>Project</Label>
               <Select value={form.project_id} onValueChange={v => update("project_id", v)}>
                 <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
-                <SelectContent>{mockProjects.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}</SelectContent>
+                <SelectContent>{projects.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label>Title</Label><Input value={form.title} onChange={e => update("title", e.target.value)} /></div>

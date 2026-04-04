@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,24 +9,117 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { mockProjects, mockCities } from "@/data/mock";
+import { useAuth } from "@/lib/auth/useAuth";
+import { getVariables } from "@/modules/app-variables/appVariables.client";
+import type { AppVariableItem } from "@/modules/app-variables/types";
+import { getProjects } from "@/modules/projects/project.client";
+import type { Project } from "@/types";
 
 const ProjectsList = () => {
+  const { user, loading: authLoading } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [cities, setCities] = useState<AppVariableItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [lookupError, setLookupError] = useState("");
 
-  const filtered = mockProjects.filter((p) => {
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!user) {
+      setProjects([]);
+      setLoading(false);
+      return;
+    }
+
+    let mounted = true;
+
+    async function loadProjects() {
+      try {
+        setLoading(true);
+        setError("");
+        const result = await getProjects();
+
+        if (!mounted) {
+          return;
+        }
+
+        setProjects(result as Project[]);
+      } catch (err) {
+        if (!mounted) {
+          return;
+        }
+
+        const message = err instanceof Error ? err.message : "Failed to load projects.";
+        setError(message);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadProjects();
+
+    return () => {
+      mounted = false;
+    };
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let mounted = true;
+
+    async function loadCities() {
+      try {
+        setLookupError("");
+        const cityItems = await getVariables("cities");
+
+        if (!mounted) {
+          return;
+        }
+
+        setCities(cityItems);
+      } catch (err) {
+        if (!mounted) {
+          return;
+        }
+
+        const message = err instanceof Error ? err.message : "Failed to load cities.";
+        setLookupError(message);
+      }
+    }
+
+    loadCities();
+
+    return () => {
+      mounted = false;
+    };
+  }, [authLoading, user]);
+
+  const filtered = projects.filter((p) => {
     if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && p.status !== statusFilter) return false;
     return true;
   });
 
-  const getCityName = (id: string) => mockCities.find(c => c.id === id)?.name || "";
+  const getCityName = (id: string) => cities.find((city) => city.id === id)?.name || "-";
 
   return (
     <div>
       <PageHeader title="Projects" description="Manage your development projects" actions={<Button asChild><Link href="/projects/new"><Plus className="mr-2 h-4 w-4" />Add Project</Link></Button>} />
       <Card className="p-1.5">
+        {lookupError ? (
+          <div className="px-3 pt-3 text-sm text-destructive">{lookupError}</div>
+        ) : null}
+
         <div className="flex flex-wrap gap-2 p-3 pb-0">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -42,7 +135,25 @@ const ProjectsList = () => {
             </SelectContent>
           </Select>
         </div>
-        {filtered.length === 0 ? (
+
+        {loading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading projects...</div>
+        ) : error ? (
+          <div className="p-6">
+            <EmptyState
+              title="Unable to load projects"
+              description={error}
+              action={
+                <Button asChild>
+                  <Link href="/projects/new">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Project
+                  </Link>
+                </Button>
+              }
+            />
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="p-6"><EmptyState title="No projects found" description="Try adjusting filters or add a new project." action={<Button asChild><Link href="/projects/new"><Plus className="mr-2 h-4 w-4" />Add Project</Link></Button>} /></div>
         ) : (
           <Table>

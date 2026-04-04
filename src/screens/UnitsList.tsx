@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,41 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { mockUnits, mockProjects, mockPropertyTypes } from "@/data/mock";
+import { useAuth } from "@/lib/auth/useAuth";
+import { getProjects } from "@/modules/projects/project.client";
+import { mockUnits, mockPropertyTypes } from "@/data/mock";
+import type { Project } from "@/types";
 
 const UnitsList = () => {
+  const { user, loading: authLoading } = useAuth();
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    getProjects()
+      .then((items) => {
+        if (!cancelled) {
+          setProjects(items as Project[]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProjects([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
 
   const filtered = mockUnits.filter((u) => {
     if (search && !u.title.toLowerCase().includes(search.toLowerCase())) return false;
@@ -23,7 +52,7 @@ const UnitsList = () => {
     return true;
   });
 
-  const getProjectName = (id: string) => mockProjects.find(p => p.id === id)?.title || "";
+  const getProjectName = (id: string) => projects.find(p => p.id === id)?.title || "";
   const getTypeName = (id: string) => mockPropertyTypes.find(t => t.id === id)?.name || "";
 
   return (
@@ -39,7 +68,7 @@ const UnitsList = () => {
             <SelectTrigger className="w-[180px] h-9 bg-muted/50 border-0"><SelectValue placeholder="Project" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Projects</SelectItem>
-              {mockProjects.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+              {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
