@@ -186,7 +186,7 @@ const PropertyDetail = () => {
 
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight truncate">{property.title}</h1>
+            <h1 className="text-2xl font-bold tracking-tight truncate">Property Details</h1>
             <StatusBadge status={property.status} />
           </div>
           <p className="text-sm text-muted-foreground mt-1">{typeName} · {listingTypeLabel} · {cityName}</p>
@@ -203,7 +203,7 @@ const PropertyDetail = () => {
         <div className="grid lg:grid-cols-[1.45fr_1fr]">
           <div className="relative min-h-[18rem] bg-muted/30">
             {mainImage ? (
-              <img src={mainImage} alt={property.title} className="h-full w-full object-cover" />
+              <img src={mainImage} alt="Property image" className="h-full w-full object-cover" />
             ) : (
               <div className="h-full w-full flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
@@ -269,7 +269,7 @@ const PropertyDetail = () => {
                 <img
                   key={`${imageUrl}-${index}`}
                   src={imageUrl}
-                  alt={`${property.title} gallery ${index + 1}`}
+                  alt={`Property gallery ${index + 1}`}
                   className="w-full aspect-video rounded-lg border object-cover"
                 />
               ))}

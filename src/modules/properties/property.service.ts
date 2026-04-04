@@ -147,6 +147,24 @@ function normalizePropertyData(input: PropertyWriteInput) {
   };
 }
 
+function validateFloorConsistency(data: { total_floors: number | null; unit_floor_number: number | null }) {
+  const hasTotalFloors = typeof data.total_floors === "number" && Number.isFinite(data.total_floors);
+  const hasUnitFloorNumber =
+    typeof data.unit_floor_number === "number" && Number.isFinite(data.unit_floor_number);
+
+  if (hasUnitFloorNumber && !hasTotalFloors) {
+    throw new Error("Total floors is required when unit floor number is provided.");
+  }
+
+  if (
+    hasUnitFloorNumber &&
+    hasTotalFloors &&
+    (data.unit_floor_number as number) > (data.total_floors as number)
+  ) {
+    throw new Error("Unit floor number cannot be greater than total floors.");
+  }
+}
+
 function mapDocToPropertyRecord(id: string, data: Record<string, unknown>): PropertyRecord {
   const address = (data.address || {}) as Partial<PropertyAddress>;
   const coordinates = (data.coordinates || {}) as Partial<PropertyCoordinates>;
@@ -222,6 +240,8 @@ export async function createProperty(data: PropertyWriteInput): Promise<Property
   const now = Timestamp.now();
   const normalized = normalizePropertyData(data);
 
+  validateFloorConsistency(normalized);
+
   const payload = {
     ...normalized,
     sold_at: normalized.status === "sold" ? now : null,
@@ -253,6 +273,8 @@ export async function updateProperty(id: string, data: PropertyWriteInput): Prom
 
   const now = Timestamp.now();
   const normalized = normalizePropertyData(data);
+
+  validateFloorConsistency(normalized);
 
   const payload = {
     ...normalized,

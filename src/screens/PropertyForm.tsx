@@ -77,6 +77,23 @@ function formatPriceInput(value: number): string {
   return value.toLocaleString("en-US");
 }
 
+function buildInternalPropertyTitle(
+  input: Omit<Property, "id">,
+  propertyTypes: PropertyType[],
+  cities: City[],
+): string {
+  const typeName = propertyTypes.find((item) => item.id === input.type_id)?.name?.trim() || "";
+  const cityName = cities.find((item) => item.id === input.city_id)?.name?.trim() || "";
+  const areaName = input.area.trim();
+
+  const parts = [typeName, cityName || areaName].filter(Boolean);
+  if (parts.length > 0) {
+    return parts.join(" - ");
+  }
+
+  return `Property ${Date.now()}`;
+}
+
 function normalizePhoneNumber(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -277,14 +294,11 @@ const PropertyForm = () => {
 
       const payload: Omit<Property, "id"> = {
         ...form,
+        title: form.title.trim() || buildInternalPropertyTitle(form, propertyTypes, cities),
         contact_name: form.contact_name.trim(),
         primary_mobile_number: normalizedPrimaryMobileNumber,
         secondary_mobile_number: normalizedSecondaryMobileNumber || undefined,
       };
-
-      if (!payload.title.trim() && !isEdit) {
-        throw new Error("Property title is required.");
-      }
 
       if (!payload.type_id) {
         throw new Error("Property type is required.");
@@ -329,6 +343,23 @@ const PropertyForm = () => {
 
       if (!isValidCoordinates(payload.lat, payload.lng)) {
         throw new Error("Coordinates must be empty or include valid latitude and longitude.");
+      }
+
+      const hasTotalFloors =
+        typeof payload.total_floors === "number" && Number.isFinite(payload.total_floors);
+      const hasUnitFloorNumber =
+        typeof payload.unit_floor_number === "number" && Number.isFinite(payload.unit_floor_number);
+
+      if (hasUnitFloorNumber && !hasTotalFloors) {
+        throw new Error("Total floors is required when unit floor number is provided.");
+      }
+
+      if (
+        hasUnitFloorNumber &&
+        hasTotalFloors &&
+        (payload.unit_floor_number as number) > (payload.total_floors as number)
+      ) {
+        throw new Error("Unit floor number cannot be greater than total floors.");
       }
 
       const activeLocalFiles = Object.fromEntries(
@@ -422,9 +453,6 @@ const PropertyForm = () => {
       <div className="grid gap-6 max-w-4xl">
         <FormSection title="Basic Information" description="Core details about the property">
           <div className="grid gap-5 sm:grid-cols-2">
-            {!isEdit ? (
-              <div className="sm:col-span-2 space-y-2"><Label>Title *</Label><Input value={form.title} onChange={e => update("title", e.target.value)} placeholder="e.g. Luxury Apartment in Downtown" /></div>
-            ) : null}
             <div className="space-y-2"><Label>Type *</Label>
               <Select value={form.type_id} onValueChange={v => update("type_id", v)}>
                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
@@ -517,7 +545,7 @@ const PropertyForm = () => {
             <div className="space-y-2"><Label>Bedrooms *</Label><Input type="number" min={0} value={form.bedrooms || ""} onChange={e => update("bedrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
             <div className="space-y-2"><Label>Bathrooms *</Label><Input type="number" min={0} value={form.bathrooms || ""} onChange={e => update("bathrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
             <div className="space-y-2"><Label>Balconies *</Label><Input type="number" min={0} value={form.balconies || ""} onChange={e => update("balconies", Math.max(0, Number(e.target.value) || 0))} /></div>
-            <div className="space-y-2"><Label>Floors *</Label><Input type="number" min={0} value={form.floors || ""} onChange={e => update("floors", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Property Floors *</Label><Input type="number" min={0} value={form.floors || ""} onChange={e => update("floors", Math.max(0, Number(e.target.value) || 0))} /></div>
           </div>
         </FormSection>
 
@@ -547,6 +575,9 @@ const PropertyForm = () => {
         </FormSection>
 
         <FormSection title="Building Info" description="Building-specific details (optional)">
+          <p className="mb-4 text-xs text-muted-foreground">
+            For apartments: use Total Floors and Unit Floor Number. For standalone properties: use Property Floors.
+          </p>
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2"><Label>Building Name (Optional)</Label><Input value={form.building_name || ""} onChange={e => update("building_name", e.target.value)} /></div>
             <div className="space-y-2"><Label>Tower Number (Optional)</Label><Input value={form.tower_number || ""} onChange={e => update("tower_number", e.target.value)} /></div>
