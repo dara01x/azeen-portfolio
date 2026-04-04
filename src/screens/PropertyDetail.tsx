@@ -317,6 +317,16 @@ const PropertyDetail = () => {
             <p className="text-lg font-semibold">{property.floors}</p>
           </CardContent>
         </Card>
+
+        <Card className="border-border/70">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Layers3 className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-wide">Balconies</span>
+            </div>
+            <p className="text-lg font-semibold">{property.balconies}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
@@ -433,6 +443,18 @@ const PropertyDetail = () => {
               <Field label="Total Floors" value={property.total_floors} />
               <Field label="Unit Floor Number" value={property.unit_floor_number} />
               <Field label="Building Name" value={property.building_name} />
+              <Field label="Tower Number" value={property.tower_number} />
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Contact Information</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4">
+              <Field label="Contact Name" value={property.contact_name} />
+              <Field label="Primary Mobile Number" value={property.primary_mobile_number} />
+              <Field label="Secondary Mobile Number" value={property.secondary_mobile_number} />
             </CardContent>
           </Card>
 

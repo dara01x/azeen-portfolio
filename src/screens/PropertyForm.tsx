@@ -52,6 +52,36 @@ function parseOptionalNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function normalizePhoneNumber(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  let normalized = trimmed.replace(/[\s\-()]/g, "");
+  normalized = normalized.replace(/(?!^)\+/g, "");
+
+  if (normalized.startsWith("00")) {
+    normalized = `+${normalized.slice(2)}`;
+  }
+
+  return normalized;
+}
+
+function isValidPhoneNumber(value: string): boolean {
+  return /^\+?\d{7,15}$/.test(value);
+}
+
+function isValidCoordinates(lat?: number, lng?: number): boolean {
+  const hasLat = typeof lat === "number" && Number.isFinite(lat);
+  const hasLng = typeof lng === "number" && Number.isFinite(lng);
+  return (!hasLat && !hasLng) || (hasLat && hasLng);
+}
+
+function hasNegativeNumber(value: number | undefined): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value < 0;
+}
+
 function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   const uploadedImages: string[] = [];
   const localBlobImages: string[] = [];
@@ -75,9 +105,9 @@ const defaultProperty: Omit<Property, "id"> = {
   title: "", type_id: "", listing_type: "sale", status: "available",
   price: 0, currency: "USD", payment_type: "cash",
   city_id: "", area: "", address_en: "", address_ku: "", address_ar: "",
-  area_size: 0, bedrooms: 0, bathrooms: 0, floors: 1, condition: "new",
+  area_size: 0, bedrooms: 0, bathrooms: 0, balconies: 0, floors: 1, condition: "new",
   amenities: [], description_en: "", description_ku: "", description_ar: "",
-  images: [], internal_notes: "",
+  images: [], contact_name: "", primary_mobile_number: "", internal_notes: "",
 };
 
 const FormSection = ({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) => (
@@ -216,11 +246,70 @@ const PropertyForm = () => {
     setError(null);
 
     try {
+      const normalizedPrimaryMobileNumber = normalizePhoneNumber(form.primary_mobile_number);
+      const normalizedSecondaryMobileNumber = normalizePhoneNumber(form.secondary_mobile_number || "");
+
+      const payload: Omit<Property, "id"> = {
+        ...form,
+        contact_name: form.contact_name.trim(),
+        primary_mobile_number: normalizedPrimaryMobileNumber,
+        secondary_mobile_number: normalizedSecondaryMobileNumber || undefined,
+      };
+
+      if (!payload.title.trim()) {
+        throw new Error("Property title is required.");
+      }
+
+      if (!payload.type_id) {
+        throw new Error("Property type is required.");
+      }
+
+      if (!payload.city_id) {
+        throw new Error("City is required.");
+      }
+
+      if (!payload.address_en.trim() || !payload.address_ku.trim() || !payload.address_ar.trim()) {
+        throw new Error("All address fields are required.");
+      }
+
+      if (!payload.contact_name) {
+        throw new Error("Contact name is required.");
+      }
+
+      if (!payload.primary_mobile_number) {
+        throw new Error("Primary mobile number is required.");
+      }
+
+      if (!isValidPhoneNumber(payload.primary_mobile_number)) {
+        throw new Error("Primary mobile number is invalid.");
+      }
+
+      if (payload.secondary_mobile_number && !isValidPhoneNumber(payload.secondary_mobile_number)) {
+        throw new Error("Secondary mobile number is invalid.");
+      }
+
+      if (
+        hasNegativeNumber(payload.price) ||
+        hasNegativeNumber(payload.area_size) ||
+        hasNegativeNumber(payload.bedrooms) ||
+        hasNegativeNumber(payload.bathrooms) ||
+        hasNegativeNumber(payload.balconies) ||
+        hasNegativeNumber(payload.floors) ||
+        hasNegativeNumber(payload.total_floors) ||
+        hasNegativeNumber(payload.unit_floor_number)
+      ) {
+        throw new Error("Numeric fields cannot be negative.");
+      }
+
+      if (!isValidCoordinates(payload.lat, payload.lng)) {
+        throw new Error("Coordinates must be empty or include valid latitude and longitude.");
+      }
+
       const activeLocalFiles = Object.fromEntries(
         Object.entries(localImageFiles).filter(([imageUrl]) => form.images.includes(imageUrl)),
       ) as LocalImageFileMap;
 
-      const { uploadedImages, localBlobImages } = splitImageUrls(form.images, activeLocalFiles);
+      const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeLocalFiles);
 
       if (isEdit && id) {
         const newlyUploadedImages = await uploadPropertyImageBlobUrls(id, localBlobImages, activeLocalFiles);
@@ -231,13 +320,13 @@ const PropertyForm = () => {
         const allImages = [...uploadedImages, ...newlyUploadedImages];
 
         await updateProperty(id, {
-          ...form,
+          ...payload,
           images: allImages,
           main_image: allImages[0],
         });
       } else {
         const created = await createProperty({
-          ...form,
+          ...payload,
           images: uploadedImages,
           main_image: uploadedImages[0],
         });
@@ -255,7 +344,7 @@ const PropertyForm = () => {
 
         if (allImages.length > 0) {
           await updateProperty(created.id, {
-            ...form,
+            ...payload,
             images: allImages,
             main_image: allImages[0],
           });
@@ -337,7 +426,7 @@ const PropertyForm = () => {
 
         <FormSection title="Pricing" description="Set the price and payment terms">
           <div className="grid gap-5 sm:grid-cols-3">
-            <div className="space-y-2"><Label>Price</Label><Input type="number" value={form.price || ""} onChange={e => update("price", Number(e.target.value))} placeholder="0" /></div>
+            <div className="space-y-2"><Label>Price</Label><Input type="number" min={0} value={form.price || ""} onChange={e => update("price", Math.max(0, Number(e.target.value) || 0))} placeholder="0" /></div>
             <div className="space-y-2"><Label>Currency</Label>
               <Select value={form.currency} onValueChange={v => update("currency", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -386,10 +475,11 @@ const PropertyForm = () => {
 
         <FormSection title="Property Details" description="Physical characteristics">
           <div className="grid gap-5 sm:grid-cols-4">
-            <div className="space-y-2"><Label>Area Size (m²)</Label><Input type="number" value={form.area_size || ""} onChange={e => update("area_size", Number(e.target.value))} /></div>
-            <div className="space-y-2"><Label>Bedrooms</Label><Input type="number" value={form.bedrooms || ""} onChange={e => update("bedrooms", Number(e.target.value))} /></div>
-            <div className="space-y-2"><Label>Bathrooms</Label><Input type="number" value={form.bathrooms || ""} onChange={e => update("bathrooms", Number(e.target.value))} /></div>
-            <div className="space-y-2"><Label>Floors</Label><Input type="number" value={form.floors || ""} onChange={e => update("floors", Number(e.target.value))} /></div>
+            <div className="space-y-2"><Label>Area Size (m²)</Label><Input type="number" min={0} value={form.area_size || ""} onChange={e => update("area_size", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Bedrooms</Label><Input type="number" min={0} value={form.bedrooms || ""} onChange={e => update("bedrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Bathrooms</Label><Input type="number" min={0} value={form.bathrooms || ""} onChange={e => update("bathrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Balconies</Label><Input type="number" min={0} value={form.balconies || ""} onChange={e => update("balconies", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Floors</Label><Input type="number" min={0} value={form.floors || ""} onChange={e => update("floors", Math.max(0, Number(e.target.value) || 0))} /></div>
           </div>
         </FormSection>
 
@@ -421,9 +511,10 @@ const PropertyForm = () => {
         <FormSection title="Building Info" description="Building-specific details (optional)">
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2"><Label>Building Name</Label><Input value={form.building_name || ""} onChange={e => update("building_name", e.target.value)} /></div>
+            <div className="space-y-2"><Label>Tower Number (Optional)</Label><Input value={form.tower_number || ""} onChange={e => update("tower_number", e.target.value)} /></div>
             <div className="space-y-2"><Label>Land Number</Label><Input value={form.land_number || ""} onChange={e => update("land_number", e.target.value)} /></div>
-            <div className="space-y-2"><Label>Total Floors</Label><Input type="number" value={form.total_floors ?? ""} onChange={e => update("total_floors", parseOptionalNumber(e.target.value))} /></div>
-            <div className="space-y-2"><Label>Unit Floor Number</Label><Input type="number" value={form.unit_floor_number ?? ""} onChange={e => update("unit_floor_number", parseOptionalNumber(e.target.value))} /></div>
+            <div className="space-y-2"><Label>Total Floors</Label><Input type="number" min={0} value={form.total_floors ?? ""} onChange={e => update("total_floors", parseOptionalNumber(e.target.value))} /></div>
+            <div className="space-y-2"><Label>Unit Floor Number</Label><Input type="number" min={0} value={form.unit_floor_number ?? ""} onChange={e => update("unit_floor_number", parseOptionalNumber(e.target.value))} /></div>
           </div>
         </FormSection>
 
@@ -479,6 +570,14 @@ const PropertyForm = () => {
             <div className="space-y-2"><Label>Project ID</Label><Input value={form.project_id || ""} onChange={e => update("project_id", e.target.value)} placeholder="Optional" /></div>
             <div className="space-y-2"><Label>Owner Client ID</Label><Input value={form.owner_client_id || ""} onChange={e => update("owner_client_id", e.target.value)} placeholder="Optional" /></div>
             <div className="space-y-2"><Label>Assigned Company ID</Label><Input value={form.assigned_company_id || ""} onChange={e => update("assigned_company_id", e.target.value)} placeholder="Optional" /></div>
+          </div>
+        </FormSection>
+
+        <FormSection title="Contact Information" description="Owner or agent contact details">
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="space-y-2"><Label>Contact Name *</Label><Input value={form.contact_name} onChange={e => update("contact_name", e.target.value)} placeholder="Enter contact person name" /></div>
+            <div className="space-y-2"><Label>Primary Mobile Number *</Label><Input value={form.primary_mobile_number} onChange={e => update("primary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
+            <div className="space-y-2 sm:col-span-2"><Label>Secondary Mobile Number</Label><Input value={form.secondary_mobile_number || ""} onChange={e => update("secondary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
           </div>
         </FormSection>
 

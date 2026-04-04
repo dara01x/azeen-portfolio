@@ -63,6 +63,7 @@ export interface Property {
   area_size: number;
   bedrooms: number;
   bathrooms: number;
+  balconies: number;
   floors: number;
   condition: "new" | "used" | "under_construction";
   amenities: string[];
@@ -71,6 +72,7 @@ export interface Property {
   total_floors?: number;
   unit_floor_number?: number;
   building_name?: string;
+  tower_number?: string;
   description_en: string;
   description_ku: string;
   description_ar: string;
@@ -80,6 +82,9 @@ export interface Property {
   project_id?: string;
   owner_client_id?: string;
   assigned_company_id?: string;
+  contact_name: string;
+  primary_mobile_number: string;
+  secondary_mobile_number?: string;
   internal_notes?: string;
 }
 
