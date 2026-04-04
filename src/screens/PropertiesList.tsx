@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,6 +30,7 @@ const PropertiesList = () => {
   const [cityFilter, setCityFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (authLoading || !user) {
@@ -103,6 +105,45 @@ const PropertiesList = () => {
   const getTypeName = (id: string) => propertyTypes.find((type) => type.id === id)?.name || id;
   const getCityName = (id: string) => cities.find((city) => city.id === id)?.name || id;
 
+  useEffect(() => {
+    const availableIds = new Set(properties.map((property) => property.id));
+    setSelectedPropertyIds((current) => {
+      const next = current.filter((id) => availableIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [properties]);
+
+  const selectedIdSet = new Set(selectedPropertyIds);
+  const filteredIds = filtered.map((property) => property.id);
+  const filteredIdSet = new Set(filteredIds);
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selectedIdSet.has(id));
+  const someFilteredSelected =
+    filteredIds.some((id) => selectedIdSet.has(id)) && !allFilteredSelected;
+
+  const toggleSelectAllFiltered = (checked: boolean | "indeterminate") => {
+    if (checked === true) {
+      setSelectedPropertyIds((current) => {
+        const next = new Set(current);
+        filteredIds.forEach((id) => next.add(id));
+        return Array.from(next);
+      });
+      return;
+    }
+
+    setSelectedPropertyIds((current) => current.filter((id) => !filteredIdSet.has(id)));
+  };
+
+  const togglePropertySelection = (propertyId: string, checked: boolean | "indeterminate") => {
+    setSelectedPropertyIds((current) => {
+      if (checked === true) {
+        return current.includes(propertyId) ? current : [...current, propertyId];
+      }
+
+      return current.filter((id) => id !== propertyId);
+    });
+  };
+
   return (
     <div>
       <PageHeader
@@ -141,6 +182,16 @@ const PropertiesList = () => {
             </SelectContent>
           </Select>
         </div>
+        {selectedPropertyIds.length > 0 ? (
+          <div className="px-3 pt-2">
+            <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">{selectedPropertyIds.length} selected</p>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedPropertyIds([])}>
+                Clear selection
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {loading ? (
           <div className="p-6">
             <p className="text-sm text-muted-foreground">Loading properties...</p>
@@ -157,6 +208,14 @@ const PropertiesList = () => {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
+                <TableHead className="w-[44px]">
+                  <Checkbox
+                    checked={allFilteredSelected ? true : someFilteredSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAllFiltered}
+                    aria-label="Select all properties"
+                  />
+                </TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Thumbnail</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Title</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">City</TableHead>
@@ -168,7 +227,34 @@ const PropertiesList = () => {
             </TableHeader>
             <TableBody>
               {filtered.map((p) => (
-                <TableRow key={p.id} className="group cursor-pointer" onClick={() => router.push(`/properties/${p.id}`)}>
+                <TableRow
+                  key={p.id}
+                  className={`group cursor-pointer ${selectedIdSet.has(p.id) ? "bg-muted/30" : ""}`}
+                  onClick={() => router.push(`/properties/${p.id}`)}
+                >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIdSet.has(p.id)}
+                      onCheckedChange={(checked) => togglePropertySelection(p.id, checked)}
+                      aria-label={`Select ${p.title}`}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="h-11 w-16 overflow-hidden rounded-md border bg-muted/20">
+                      {p.main_image || p.images[0] ? (
+                        <img
+                          src={p.main_image || p.images[0]}
+                          alt={`${p.title} thumbnail`}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                          No image
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-medium">{p.title}</TableCell>
                   <TableCell className="text-muted-foreground">{getTypeName(p.type_id)}</TableCell>
                   <TableCell className="text-muted-foreground">{getCityName(p.city_id)}</TableCell>
