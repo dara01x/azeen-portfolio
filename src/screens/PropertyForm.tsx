@@ -122,16 +122,7 @@ function isValidPhoneNumber(value: string): boolean {
 function isValidCoordinates(lat?: number, lng?: number): boolean {
   const hasLat = typeof lat === "number" && Number.isFinite(lat);
   const hasLng = typeof lng === "number" && Number.isFinite(lng);
-
-  if (!hasLat && !hasLng) {
-    return true;
-  }
-
-  if (!hasLat || !hasLng) {
-    return false;
-  }
-
-  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  return (!hasLat && !hasLng) || (hasLat && hasLng);
 }
 
 function hasNegativeNumber(value: number | undefined): boolean {
@@ -393,9 +384,7 @@ const PropertyForm = () => {
       }
 
       if (!isValidCoordinates(payload.lat, payload.lng)) {
-        throw new Error(
-          "Coordinates must be empty, or use latitude between -90 and 90 and longitude between -180 and 180.",
-        );
+        throw new Error("Coordinates must be empty or include valid latitude and longitude.");
       }
 
       const hasTotalFloors =
