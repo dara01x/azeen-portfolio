@@ -7,14 +7,16 @@ import {
   Bath,
   BedDouble,
   Building2,
+  ChevronLeft,
+  ChevronRight,
   Edit,
   ImageIcon,
   Layers3,
-  MapPin,
   Ruler,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
@@ -72,6 +74,8 @@ const PropertyDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
   const [amenities, setAmenities] = useState<AppVariableItem[]>([]);
@@ -146,6 +150,24 @@ const PropertyDetail = () => {
     };
   }, [authLoading, user]);
 
+  useEffect(() => {
+    if (!property) {
+      setActiveImageIndex(0);
+      return;
+    }
+
+    const availableImages =
+      property.images.length > 0 ? property.images : property.main_image ? [property.main_image] : [];
+
+    setActiveImageIndex((current) => {
+      if (availableImages.length === 0) {
+        return 0;
+      }
+
+      return current >= availableImages.length ? 0 : current;
+    });
+  }, [property]);
+
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading property...</p>;
   }
@@ -168,14 +190,31 @@ const PropertyDetail = () => {
   const paymentTypeLabel = formatEnumLabel(property.payment_type);
   const ownershipTypeLabel = formatEnumLabel(property.ownership_type);
   const images = property.images.length > 0 ? property.images : property.main_image ? [property.main_image] : [];
-  const mainImage = property.main_image || images[0];
-  const mainImageIndex = mainImage ? images.indexOf(mainImage) : -1;
-  const galleryImages = images.filter((_, index) => index !== mainImageIndex);
+  const safeImageIndex = images.length > 0 && activeImageIndex < images.length ? activeImageIndex : 0;
+  const activeImage = images.length > 0 ? images[safeImageIndex] : undefined;
   const priceLabel = `${property.currency} ${property.price.toLocaleString()}`;
   const coordinates =
     typeof property.lat === "number" && Number.isFinite(property.lat) && typeof property.lng === "number" && Number.isFinite(property.lng)
       ? { lat: property.lat, lng: property.lng }
       : null;
+
+  const showImageControls = images.length > 1;
+
+  const showPreviousImage = () => {
+    if (!showImageControls) {
+      return;
+    }
+
+    setActiveImageIndex((current) => (current - 1 + images.length) % images.length);
+  };
+
+  const showNextImage = () => {
+    if (!showImageControls) {
+      return;
+    }
+
+    setActiveImageIndex((current) => (current + 1) % images.length);
+  };
 
   return (
     <div className="space-y-6">
@@ -200,83 +239,162 @@ const PropertyDetail = () => {
       {lookupError ? <p className="text-sm text-destructive">{lookupError}</p> : null}
 
       <Card className="overflow-hidden border-border/70 shadow-sm">
-        <div className="grid lg:grid-cols-[1.45fr_1fr]">
-          <div className="relative min-h-[18rem] bg-muted/30">
-            {mainImage ? (
-              <img src={mainImage} alt="Property image" className="h-full w-full object-cover" />
-            ) : (
-              <div className="h-full w-full flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <ImageIcon className="h-9 w-9 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">No main image uploaded</p>
+        <div className="bg-muted/20 p-4 md:p-6">
+          <div className="flex flex-col space-y-4">
+            <div className="relative w-full">
+              {activeImage ? (
+                <button
+                  type="button"
+                  className="block w-full cursor-zoom-in"
+                  onClick={() => setIsImageZoomOpen(true)}
+                  aria-label="Zoom image"
+                >
+                  <img
+                    src={activeImage}
+                    alt={`Property image ${safeImageIndex + 1}`}
+                    className="w-full rounded-lg h-[18rem] md:h-[34rem] object-contain bg-muted/30"
+                  />
+                </button>
+              ) : (
+                <div className="h-[18rem] w-full rounded-lg border bg-muted/30 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <ImageIcon className="h-9 w-9 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">No image uploaded</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/45 to-transparent p-4 text-white">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <MapPin className="h-4 w-4" />
-                <span>{cityName}</span>
-              </div>
-              <p className="text-xs text-white/85 mt-1">{property.area || "Area not specified"}</p>
-            </div>
-          </div>
-
-          <div className="p-6 bg-gradient-to-br from-background via-background to-muted/25">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Asking Price</p>
-            <p className="text-3xl font-bold leading-tight mt-1">{priceLabel}</p>
-
-            <div className="flex flex-wrap gap-2 mt-3">
-              <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
-                {listingTypeLabel}
-              </span>
-              <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
-                {statusLabel}
-              </span>
-              <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
-                {conditionLabel}
-              </span>
+              {showImageControls ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute left-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-background/90"
+                    onClick={showPreviousImage}
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute right-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-background/90"
+                    onClick={showNextImage}
+                    aria-label="Next image"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : null}
             </div>
 
-            <Separator className="my-5" />
+            {images.length > 1 ? (
+              <div className="grid w-full grid-cols-4 gap-4">
+                {images.map((imageUrl, index) => (
+                  <img
+                    key={`${imageUrl}-${index}`}
+                    src={imageUrl}
+                    alt={`Thumbnail ${index + 1}`}
+                    className={`rounded-lg md:h-24 h-14 w-full object-cover cursor-pointer hover:opacity-80 ${
+                      index === safeImageIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+                    }`}
+                    onClick={() => setActiveImageIndex(index)}
+                  />
+                ))}
+              </div>
+            ) : null}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border bg-background/75 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Bedrooms</p>
-                <p className="text-lg font-semibold mt-1">{property.bedrooms}</p>
+            {images.length > 0 ? (
+              <div className="w-full flex justify-end text-xs text-muted-foreground">
+                <span>
+                  {safeImageIndex + 1} / {images.length}
+                </span>
               </div>
-              <div className="rounded-lg border bg-background/75 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Bathrooms</p>
-                <p className="text-lg font-semibold mt-1">{property.bathrooms}</p>
-              </div>
-              <div className="rounded-lg border bg-background/75 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Area Size</p>
-                <p className="text-lg font-semibold mt-1">{property.area_size} m2</p>
-              </div>
-              <div className="rounded-lg border bg-background/75 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Floors</p>
-                <p className="text-lg font-semibold mt-1">{property.floors}</p>
-              </div>
-            </div>
+            ) : null}
           </div>
         </div>
+      </Card>
 
-        {galleryImages.length > 0 ? (
-          <div className="border-t bg-muted/20 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Gallery</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {galleryImages.map((imageUrl, index) => (
-                <img
-                  key={`${imageUrl}-${index}`}
-                  src={imageUrl}
-                  alt={`Property gallery ${index + 1}`}
-                  className="w-full aspect-video rounded-lg border object-cover"
-                />
-              ))}
+      <Card className="border-border/70 shadow-sm">
+        <CardContent className="p-6 bg-gradient-to-br from-background via-background to-muted/25">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Asking Price</p>
+          <p className="text-3xl font-bold leading-tight mt-1">{priceLabel}</p>
+
+          <div className="flex flex-wrap gap-2 mt-3">
+            <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
+              {listingTypeLabel}
+            </span>
+            <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
+              {statusLabel}
+            </span>
+            <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
+              {conditionLabel}
+            </span>
+          </div>
+
+          <Separator className="my-5" />
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border bg-background/75 p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Bedrooms</p>
+              <p className="text-lg font-semibold mt-1">{property.bedrooms}</p>
+            </div>
+            <div className="rounded-lg border bg-background/75 p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Bathrooms</p>
+              <p className="text-lg font-semibold mt-1">{property.bathrooms}</p>
+            </div>
+            <div className="rounded-lg border bg-background/75 p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Area Size</p>
+              <p className="text-lg font-semibold mt-1">{property.area_size} m2</p>
+            </div>
+            <div className="rounded-lg border bg-background/75 p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Floors</p>
+              <p className="text-lg font-semibold mt-1">{property.floors}</p>
             </div>
           </div>
-        ) : null}
+        </CardContent>
       </Card>
+
+      <Dialog open={isImageZoomOpen} onOpenChange={setIsImageZoomOpen}>
+        <DialogContent className="max-w-[95vw] border-none bg-transparent p-0 shadow-none [&>button]:right-3 [&>button]:top-3 [&>button]:rounded-full [&>button]:bg-black/70 [&>button]:text-white [&>button]:opacity-100">
+          <DialogTitle className="sr-only">Image zoom preview</DialogTitle>
+          <DialogDescription className="sr-only">
+            Enlarged preview for property image {safeImageIndex + 1} of {images.length || 1}.
+          </DialogDescription>
+          {activeImage ? (
+            <div className="relative">
+              <img
+                src={activeImage}
+                alt={`Zoomed property image ${safeImageIndex + 1}`}
+                className="h-[85vh] w-[95vw] rounded-lg bg-black/90 object-contain"
+              />
+
+              {showImageControls ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute left-3 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-black/70 text-white hover:bg-black/80"
+                    onClick={showPreviousImage}
+                    aria-label="Previous image"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute right-3 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-black/70 text-white hover:bg-black/80"
+                    onClick={showNextImage}
+                    aria-label="Next image"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card className="border-border/70">
