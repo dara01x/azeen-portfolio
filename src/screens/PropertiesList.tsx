@@ -19,7 +19,6 @@ import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/components/ui/sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import {
@@ -667,100 +666,108 @@ const PropertiesList = () => {
           </div>
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[44px]">
-                    <Checkbox
-                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
-                      onCheckedChange={toggleSelectAllVisible}
-                      aria-label="Select all properties on current page"
-                    />
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Thumbnail</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Property ID</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">City</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Listing</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Price</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
-                  <TableHead className="w-[100px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedProperties.map((p) => (
-                  <TableRow
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                  onCheckedChange={toggleSelectAllVisible}
+                  aria-label="Select all properties on current page"
+                />
+                <span className="text-xs text-muted-foreground">Select all on this page</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{paginatedProperties.length} cards on this page</p>
+            </div>
+
+            <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+              {paginatedProperties.map((p) => {
+                const statusMeta = STATUS_META[p.status];
+
+                return (
+                  <div
                     key={p.id}
-                    className={`group cursor-pointer ${selectedIdSet.has(p.id) ? "bg-muted/30" : ""}`}
+                    className={`group cursor-pointer overflow-hidden rounded-lg border bg-card transition-shadow hover:shadow-sm ${selectedIdSet.has(p.id) ? "ring-2 ring-primary/35" : ""}`}
                     onClick={() => router.push(`/properties/${p.id}`)}
                   >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        checked={selectedIdSet.has(p.id)}
-                        onCheckedChange={(checked) => togglePropertySelection(p.id, checked)}
-                        aria-label={`Select ${p.title}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="h-16 w-24 overflow-hidden rounded-md border bg-muted/20">
-                        {p.main_image || p.images[0] ? (
-                          <img
-                            src={p.main_image || p.images[0]}
-                            alt={`${p.title} thumbnail`}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                            No image
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs font-semibold text-muted-foreground">
-                      {getPropertyCode(p)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{getTypeName(p.type_id)}</TableCell>
-                    <TableCell className="text-muted-foreground">{getCityName(p.city_id)}</TableCell>
-                    <TableCell className="capitalize text-muted-foreground">{p.listing_type}</TableCell>
-                    <TableCell className="font-medium">{p.currency} {p.price.toLocaleString()}</TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      {(() => {
-                        const statusMeta = STATUS_META[p.status];
+                    <div className="relative h-40 w-full overflow-hidden bg-muted/20">
+                      {p.main_image || p.images[0] ? (
+                        <img
+                          src={p.main_image || p.images[0]}
+                          alt={`${p.title} thumbnail`}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                          No image
+                        </div>
+                      )}
 
-                        return (
-                      <Select
-                        value={p.status}
-                        onValueChange={(value) => {
-                          void handlePropertyStatusChange(p, value);
-                        }}
-                        disabled={deletingIdSet.has(p.id) || statusUpdatingIdSet.has(p.id)}
-                      >
-                        <SelectTrigger className={`h-8 w-[142px] border ${statusMeta.triggerClassName}`}>
-                          <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${statusMeta.dotClassName}`} />
-                            <SelectValue placeholder="Status" />
-                          </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="available">{STATUS_META.available.label}</SelectItem>
-                          <SelectItem value="sold">{STATUS_META.sold.label}</SelectItem>
-                          <SelectItem value="archived">{STATUS_META.archived.label}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild onClick={e => e.stopPropagation()}><Link href={`/properties/${p.id}`}>View</Link></Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild onClick={e => e.stopPropagation()}><Link href={`/properties/${p.id}/edit`}>Edit</Link></Button>
+                      <div className="absolute left-2 top-2" onClick={(event) => event.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIdSet.has(p.id)}
+                          onCheckedChange={(checked) => togglePropertySelection(p.id, checked)}
+                          aria-label={`Select ${p.title}`}
+                        />
+                      </div>
+
+                      <div className="absolute right-2 top-2 rounded-md border bg-background/90 px-2 py-1 font-mono text-[11px] font-semibold text-muted-foreground">
+                        {getPropertyCode(p)}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{p.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {getTypeName(p.type_id)} • {getCityName(p.city_id)}
+                          </p>
+                        </div>
+                        <p className="whitespace-nowrap text-sm font-semibold">
+                          {p.currency} {p.price.toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="rounded-md border bg-muted/30 px-2 py-1 capitalize">{p.listing_type}</span>
+                        <span>{p.bedrooms} bd</span>
+                        <span className="capitalize">{p.condition.replaceAll("_", " ")}</span>
+                      </div>
+
+                      <div onClick={(event) => event.stopPropagation()}>
+                        <Select
+                          value={p.status}
+                          onValueChange={(value) => {
+                            void handlePropertyStatusChange(p, value);
+                          }}
+                          disabled={deletingIdSet.has(p.id) || statusUpdatingIdSet.has(p.id)}
+                        >
+                          <SelectTrigger className={`h-8 w-full border ${statusMeta.triggerClassName}`}>
+                            <div className="flex items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full ${statusMeta.dotClassName}`} />
+                              <SelectValue placeholder="Status" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="available">{STATUS_META.available.label}</SelectItem>
+                            <SelectItem value="sold">{STATUS_META.sold.label}</SelectItem>
+                            <SelectItem value="archived">{STATUS_META.archived.label}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-1 pt-1" onClick={(event) => event.stopPropagation()}>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                          <Link href={`/properties/${p.id}`}>View</Link>
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                          <Link href={`/properties/${p.id}/edit`}>Edit</Link>
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 text-xs text-destructive hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                          onClick={() => {
                             openSingleDeleteDialog(p);
                           }}
                           disabled={deletingIdSet.has(p.id)}
@@ -768,11 +775,11 @@ const PropertiesList = () => {
                           {deletingIdSet.has(p.id) ? "Deleting..." : "Delete"}
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
             <div className="flex flex-col gap-2 border-t px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">

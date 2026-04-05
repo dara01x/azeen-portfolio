@@ -46,6 +46,10 @@ function asStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
+function asUniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
 function isLocalPreviewUrl(value: string) {
   const normalized = value.trim().toLowerCase();
   return normalized.startsWith("blob:") || normalized.startsWith("data:");
@@ -75,15 +79,38 @@ function normalizeProjectData(input: ProjectWriteInput) {
   const images = asStringArray(input.images).filter((image) => !isLocalPreviewUrl(image));
   const mainImageInput = asString(input.main_image);
   const sanitizedMainImage = isLocalPreviewUrl(mainImageInput) ? "" : mainImageInput;
+  const propertyTypeIds = asUniqueStrings(asStringArray(input.property_type_ids));
+  const amenityIds = asUniqueStrings(asStringArray(input.amenities));
+  const addressEn = asString(input.address_en);
+  const addressKu = asString(input.address_ku);
+  const addressAr = asString(input.address_ar);
+  const descriptionEn = asString(input.description_en);
+  const descriptionKu = asString(input.description_ku);
+  const descriptionAr = asString(input.description_ar);
 
   return {
     title: asString(input.title),
-    description: asString(input.description),
+    description: asString(input.description) || descriptionEn,
+    description_en: descriptionEn,
+    description_ku: descriptionKu,
+    description_ar: descriptionAr,
     status: (input.status as Project["status"]) || "active",
     city_id: asString(input.city_id),
     area: asString(input.area),
-    address: asString(input.address),
+    address: asString(input.address) || addressEn,
+    address_en: addressEn || asString(input.address),
+    address_ku: addressKu,
+    address_ar: addressAr,
     coordinates,
+    property_type_ids: propertyTypeIds,
+    area_size: asNumber(input.area_size),
+    starting_price: asNumber(input.starting_price),
+    currency: (input.currency as Project["currency"]) || "USD",
+    payment_type: (input.payment_type as Project["payment_type"]) || "cash",
+    amenities: amenityIds,
+    contact_name: asString(input.contact_name),
+    primary_mobile_number: asString(input.primary_mobile_number),
+    secondary_mobile_number: asString(input.secondary_mobile_number),
     total_units: asNumber(input.total_units),
     available_units: asNumber(input.available_units),
     images,
@@ -98,17 +125,34 @@ function normalizeProjectData(input: ProjectWriteInput) {
 function mapDocToProjectRecord(id: string, data: Record<string, unknown>): ProjectRecord {
   const coordinates = (data.coordinates || {}) as Partial<ProjectCoordinates>;
   const images = asStringArray(data.images);
+  const descriptionEn = asString(data.description_en) || asString(data.description);
+  const addressEn = asString(data.address_en) || asString(data.address);
 
   return {
     id,
     title: asString(data.title),
-    description: asString(data.description),
+    description: descriptionEn,
+    description_en: descriptionEn,
+    description_ku: asString(data.description_ku),
+    description_ar: asString(data.description_ar),
     status: (data.status as Project["status"]) || "active",
     city_id: asString(data.city_id),
     area: asString(data.area),
-    address: asString(data.address),
+    address: addressEn,
+    address_en: addressEn,
+    address_ku: asString(data.address_ku),
+    address_ar: asString(data.address_ar),
     lat: asOptionalNumber(coordinates.lat ?? data.lat),
     lng: asOptionalNumber(coordinates.lng ?? data.lng),
+    property_type_ids: asStringArray(data.property_type_ids),
+    area_size: asNumber(data.area_size),
+    starting_price: asNumber(data.starting_price),
+    currency: (asString(data.currency, "USD") as Project["currency"]) || "USD",
+    payment_type: (asString(data.payment_type, "cash") as Project["payment_type"]) || "cash",
+    amenities: asStringArray(data.amenities),
+    contact_name: asString(data.contact_name),
+    primary_mobile_number: asString(data.primary_mobile_number),
+    secondary_mobile_number: asString(data.secondary_mobile_number) || undefined,
     total_units: asNumber(data.total_units),
     available_units: asNumber(data.available_units),
     images,
