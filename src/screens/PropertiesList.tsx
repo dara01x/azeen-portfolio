@@ -19,10 +19,13 @@ import { Card } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { deleteProperty as deletePropertyById, getProperties as fetchProperties } from "@/modules/properties/property.client";
+import {
+  deleteProperty as deletePropertyById,
+  getProperties as fetchProperties,
+  updateProperty as updatePropertyById,
+} from "@/modules/properties/property.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
 import type { Property } from "@/types";
@@ -32,6 +35,27 @@ type DeleteDialogState = {
   open: boolean;
   propertyIds: string[];
   subjectLabel: string;
+};
+
+const STATUS_META: Record<
+  Property["status"],
+  { label: string; dotClassName: string; triggerClassName: string }
+> = {
+  available: {
+    label: "Available",
+    dotClassName: "bg-emerald-500",
+    triggerClassName: "bg-emerald-50 text-emerald-800 border-emerald-200",
+  },
+  sold: {
+    label: "Sold",
+    dotClassName: "bg-amber-500",
+    triggerClassName: "bg-amber-50 text-amber-800 border-amber-200",
+  },
+  archived: {
+    label: "Archived",
+    dotClassName: "bg-slate-500",
+    triggerClassName: "bg-slate-100 text-slate-700 border-slate-200",
+  },
 };
 
 const PropertiesList = () => {
@@ -49,6 +73,7 @@ const PropertiesList = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
   const [deletingPropertyIds, setDeletingPropertyIds] = useState<string[]>([]);
+  const [statusUpdatingPropertyIds, setStatusUpdatingPropertyIds] = useState<string[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
     open: false,
     propertyIds: [],
@@ -151,6 +176,7 @@ const PropertiesList = () => {
   const filteredIds = filtered.map((property) => property.id);
   const filteredIdSet = new Set(filteredIds);
   const deletingIdSet = new Set(deletingPropertyIds);
+  const statusUpdatingIdSet = new Set(statusUpdatingPropertyIds);
   const allFilteredSelected =
     filteredIds.length > 0 && filteredIds.every((id) => selectedIdSet.has(id));
   const someFilteredSelected =
@@ -203,6 +229,14 @@ const PropertiesList = () => {
   const unmarkDeletingIds = (ids: string[]) => {
     const idsToRemove = new Set(ids);
     setDeletingPropertyIds((current) => current.filter((id) => !idsToRemove.has(id)));
+  };
+
+  const markStatusUpdatingId = (id: string) => {
+    setStatusUpdatingPropertyIds((current) => (current.includes(id) ? current : [...current, id]));
+  };
+
+  const unmarkStatusUpdatingId = (id: string) => {
+    setStatusUpdatingPropertyIds((current) => current.filter((currentId) => currentId !== id));
   };
 
   const closeDeleteDialog = () => {
@@ -306,6 +340,56 @@ const PropertiesList = () => {
     closeDeleteDialog();
   }
 
+  async function handlePropertyStatusChange(property: Property, nextStatusValue: string) {
+    if (
+      nextStatusValue !== "available" &&
+      nextStatusValue !== "sold" &&
+      nextStatusValue !== "archived"
+    ) {
+      return;
+    }
+
+    const nextStatus = nextStatusValue as Property["status"];
+    if (property.status === nextStatus || statusUpdatingIdSet.has(property.id) || deletingIdSet.has(property.id)) {
+      return;
+    }
+
+    const previousStatus = property.status;
+    markStatusUpdatingId(property.id);
+    setError(null);
+
+    setProperties((current) =>
+      current.map((item) => (item.id === property.id ? { ...item, status: nextStatus } : item)),
+    );
+
+    try {
+      const { id: _id, ...propertyPayload } = property;
+      const updated = await updatePropertyById(property.id, {
+        ...propertyPayload,
+        status: nextStatus,
+      });
+
+      setProperties((current) => current.map((item) => (item.id === property.id ? updated : item)));
+      toast.success("Property status updated.");
+    } catch (updateError) {
+      setProperties((current) =>
+        current.map((item) => (item.id === property.id ? { ...item, status: previousStatus } : item)),
+      );
+
+      const message = updateError instanceof Error ? updateError.message : "Failed to update property status.";
+      setError(message);
+      toast.error(message, {
+        style: {
+          background: "hsl(var(--destructive))",
+          color: "hsl(var(--destructive-foreground))",
+          borderColor: "hsl(var(--destructive))",
+        },
+      });
+    } finally {
+      unmarkStatusUpdatingId(property.id);
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -389,7 +473,7 @@ const PropertiesList = () => {
                   />
                 </TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Thumbnail</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Title</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Property ID</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">City</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Listing</TableHead>
@@ -428,17 +512,40 @@ const PropertiesList = () => {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium">
-                    <div className="flex flex-col">
-                      <span>{p.title}</span>
-                      <span className="text-[11px] font-mono text-muted-foreground">{getPropertyCode(p)}</span>
-                    </div>
+                  <TableCell className="font-mono text-xs font-semibold text-muted-foreground">
+                    {getPropertyCode(p)}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{getTypeName(p.type_id)}</TableCell>
                   <TableCell className="text-muted-foreground">{getCityName(p.city_id)}</TableCell>
                   <TableCell className="capitalize text-muted-foreground">{p.listing_type}</TableCell>
                   <TableCell className="font-medium">{p.currency} {p.price.toLocaleString()}</TableCell>
-                  <TableCell><StatusBadge status={p.status} /></TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    {(() => {
+                      const statusMeta = STATUS_META[p.status];
+
+                      return (
+                    <Select
+                      value={p.status}
+                      onValueChange={(value) => {
+                        void handlePropertyStatusChange(p, value);
+                      }}
+                      disabled={deletingIdSet.has(p.id) || statusUpdatingIdSet.has(p.id)}
+                    >
+                      <SelectTrigger className={`h-8 w-[142px] border ${statusMeta.triggerClassName}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${statusMeta.dotClassName}`} />
+                          <SelectValue placeholder="Status" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="available">{STATUS_META.available.label}</SelectItem>
+                        <SelectItem value="sold">{STATUS_META.sold.label}</SelectItem>
+                        <SelectItem value="archived">{STATUS_META.archived.label}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="sm" className="h-7 text-xs" asChild onClick={e => e.stopPropagation()}><Link href={`/properties/${p.id}`}>View</Link></Button>
