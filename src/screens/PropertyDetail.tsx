@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   Bath,
   BedDouble,
-  Camera,
   ChevronLeft,
   ChevronRight,
   Edit,
@@ -28,17 +26,37 @@ import { useAuth } from "@/lib/auth/useAuth";
 import type { Property } from "@/types";
 import type { AppVariableItem } from "@/modules/app-variables/types";
 
-const LocationPreviewMap = dynamic(
-  () => import("@/components/PropertyLocationMap").then((mod) => mod.PropertyLocationPreviewMap),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-56 w-full rounded-lg border bg-muted/40 flex items-center justify-center text-sm text-muted-foreground">
-        Loading map...
+function GoogleSatelliteMapPreview({
+  coordinates,
+}: {
+  coordinates: { lat: number; lng: number } | null;
+}) {
+  if (!coordinates) {
+    return (
+      <div className="h-72 md:h-80 w-full rounded-xl border bg-muted/40 flex items-center justify-center text-sm text-muted-foreground">
+        No coordinates available.
       </div>
-    ),
-  },
-);
+    );
+  }
+
+  const coordinateQuery = `${coordinates.lat},${coordinates.lng}`;
+  const googleSatelliteEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(
+    coordinateQuery,
+  )}&z=17&t=k&output=embed`;
+
+  return (
+    <div className="h-72 md:h-80 w-full overflow-hidden rounded-xl border shadow-sm bg-slate-100">
+      <iframe
+        title="Property location map (satellite)"
+        src={googleSatelliteEmbedUrl}
+        className="h-full w-full border-0"
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+        allowFullScreen
+      />
+    </div>
+  );
+}
 
 const Field = ({ label, value }: { label: string; value?: string | number | null }) => (
   <div className="space-y-0.5">
@@ -430,21 +448,7 @@ const PropertyDetail = () => {
                 <CardTitle className="text-base">Location</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                    <Camera className="h-3.5 w-3.5" />
-                    Map Camera View
-                  </span>
-                  {coordinates ? (
-                    <span className="text-[11px] text-slate-400 font-mono">
-                      {coordinates.lat.toFixed(5)}, {coordinates.lng.toFixed(5)}
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="rounded-xl overflow-hidden">
-                  <LocationPreviewMap coordinates={coordinates} />
-                </div>
+                <GoogleSatelliteMapPreview coordinates={coordinates} />
 
                 {coordinates ? (
                   <p className="text-xs text-slate-400 font-mono">
