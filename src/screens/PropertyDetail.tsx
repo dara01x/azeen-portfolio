@@ -26,7 +26,7 @@ import { useAuth } from "@/lib/auth/useAuth";
 import type { Property } from "@/types";
 import type { AppVariableItem } from "@/modules/app-variables/types";
 
-function GoogleSatelliteMapPreview({
+function GoogleMapPreview({
   coordinates,
 }: {
   coordinates: { lat: number; lng: number } | null;
@@ -40,15 +40,15 @@ function GoogleSatelliteMapPreview({
   }
 
   const coordinateQuery = `${coordinates.lat},${coordinates.lng}`;
-  const googleSatelliteEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(
+  const googleMapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(
     coordinateQuery,
-  )}&z=17&t=k&output=embed`;
+  )}&z=16&output=embed`;
 
   return (
     <div className="h-72 md:h-80 w-full overflow-hidden rounded-xl border shadow-sm bg-slate-100">
       <iframe
-        title="Property location map (satellite)"
-        src={googleSatelliteEmbedUrl}
+        title="Property location map"
+        src={googleMapEmbedUrl}
         className="h-full w-full border-0"
         loading="lazy"
         referrerPolicy="no-referrer-when-downgrade"
@@ -448,7 +448,7 @@ const PropertyDetail = () => {
                 <CardTitle className="text-base">Location</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <GoogleSatelliteMapPreview coordinates={coordinates} />
+                <GoogleMapPreview coordinates={coordinates} />
 
                 {coordinates ? (
                   <p className="text-xs text-slate-400 font-mono">
