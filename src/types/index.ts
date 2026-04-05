@@ -46,6 +46,7 @@ export interface User {
 // Properties
 export interface Property {
   id: string;
+  property_code?: string;
   title: string;
   type_id: string;
   listing_type: "sale" | "rent";

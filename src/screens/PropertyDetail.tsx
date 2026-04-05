@@ -220,6 +220,9 @@ const PropertyDetail = () => {
   const safeImageIndex = images.length > 0 && activeImageIndex < images.length ? activeImageIndex : 0;
   const activeImage = images.length > 0 ? images[safeImageIndex] : undefined;
   const priceLabel = `${property.currency} ${property.price.toLocaleString()}`;
+  const propertyCode =
+    property.property_code ||
+    `P${property.id.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6).padEnd(6, "0")}`;
   const coordinates =
     typeof property.lat === "number" && Number.isFinite(property.lat) && typeof property.lng === "number" && Number.isFinite(property.lng)
       ? { lat: property.lat, lng: property.lng }
@@ -360,6 +363,7 @@ const PropertyDetail = () => {
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">ASKING PRICE</p>
               <p className="text-4xl font-bold text-slate-900 mt-1">{priceLabel}</p>
               <p className="text-sm text-slate-500 mt-1">{paymentTypeLabel}</p>
+              <p className="text-xs font-mono text-slate-500 mt-2">ID: {propertyCode}</p>
             </div>
 
             <Separator />
@@ -541,6 +545,7 @@ const PropertyDetail = () => {
               <CardContent className="p-5">
                 <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Overview</p>
                 <div className="grid grid-cols-2 gap-4">
+                  <Field label="Property ID" value={propertyCode} />
                   <Field label="Type" value={typeName} />
                   <Field label="Listing Type" value={listingTypeLabel} />
                   <Field label="Status" value={statusLabel} />

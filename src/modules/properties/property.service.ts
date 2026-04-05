@@ -2,6 +2,11 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb, getAdminStorageBucket } from "@/lib/firebase/admin";
 import type { Property } from "@/types";
 
+const PROPERTY_CODE_PREFIX = "P";
+const PROPERTY_CODE_LENGTH = 6;
+const PROPERTY_CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const PROPERTY_CODE_MAX_ATTEMPTS = 10;
+
 type PropertyAddress = {
   en: string;
   ku: string;
@@ -33,6 +38,53 @@ type PropertyWriteInput = Partial<Property> & {
   coordinates?: Partial<PropertyCoordinates>;
   description?: Partial<PropertyDescription>;
 };
+
+function normalizePropertyCode(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function buildPropertyCodeFromId(id: string) {
+  const compact = id.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const shortBody = compact.slice(0, PROPERTY_CODE_LENGTH).padEnd(PROPERTY_CODE_LENGTH, "0");
+  return `${PROPERTY_CODE_PREFIX}${shortBody}`;
+}
+
+function createRandomPropertyCode() {
+  let body = "";
+
+  for (let index = 0; index < PROPERTY_CODE_LENGTH; index += 1) {
+    const randomIndex = Math.floor(Math.random() * PROPERTY_CODE_CHARSET.length);
+    body += PROPERTY_CODE_CHARSET[randomIndex];
+  }
+
+  return `${PROPERTY_CODE_PREFIX}${body}`;
+}
+
+async function generateUniquePropertyCode(db: ReturnType<typeof getAdminDb>) {
+  for (let attempt = 0; attempt < PROPERTY_CODE_MAX_ATTEMPTS; attempt += 1) {
+    const candidate = createRandomPropertyCode();
+    const existing = await db
+      .collection("properties")
+      .where("property_code", "==", candidate)
+      .limit(1)
+      .get();
+
+    if (existing.empty) {
+      return candidate;
+    }
+  }
+
+  return `${PROPERTY_CODE_PREFIX}${Date.now().toString(36).toUpperCase().slice(-PROPERTY_CODE_LENGTH).padStart(PROPERTY_CODE_LENGTH, "0")}`;
+}
+
+function resolvePropertyCode(data: Record<string, unknown>, id: string) {
+  const code = normalizePropertyCode(asString(data.property_code));
+  if (code) {
+    return code;
+  }
+
+  return buildPropertyCodeFromId(id);
+}
 
 function asString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
@@ -293,6 +345,7 @@ function mapDocToPropertyRecord(id: string, data: Record<string, unknown>): Prop
 
   return {
     id,
+    property_code: resolvePropertyCode(data, id),
     title: asString(data.title),
     type_id: asString(data.type_id),
     listing_type: (data.listing_type as Property["listing_type"]) || "sale",
@@ -360,9 +413,11 @@ export async function createProperty(data: PropertyWriteInput): Promise<Property
   const normalized = normalizePropertyData(data);
 
   validateFloorConsistency(normalized);
+  const propertyCode = await generateUniquePropertyCode(db);
 
   const payload = {
     ...normalized,
+    property_code: propertyCode,
     sold_at: normalized.status === "sold" ? now : null,
     created_at: now,
     updated_at: now,

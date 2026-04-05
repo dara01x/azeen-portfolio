@@ -55,6 +55,9 @@ const PropertiesList = () => {
     subjectLabel: "",
   });
 
+  const getPropertyCode = (property: Property) =>
+    property.property_code || `P${property.id.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6).padEnd(6, "0")}`;
+
   useEffect(() => {
     if (authLoading || !user) {
       return;
@@ -118,7 +121,15 @@ const PropertiesList = () => {
   }, [authLoading, user]);
 
   const filtered = properties.filter((p) => {
-    if (search && !p.title.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      const term = search.toLowerCase();
+      const matchesTitle = p.title.toLowerCase().includes(term);
+      const matchesCode = getPropertyCode(p).toLowerCase().includes(term);
+      if (!matchesTitle && !matchesCode) {
+        return false;
+      }
+    }
+
     if (cityFilter !== "all" && p.city_id !== cityFilter) return false;
     if (typeFilter !== "all" && p.type_id !== typeFilter) return false;
     if (statusFilter !== "all" && p.status !== statusFilter) return false;
@@ -417,7 +428,12 @@ const PropertiesList = () => {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium">{p.title}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex flex-col">
+                      <span>{p.title}</span>
+                      <span className="text-[11px] font-mono text-muted-foreground">{getPropertyCode(p)}</span>
+                    </div>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{getTypeName(p.type_id)}</TableCell>
                   <TableCell className="text-muted-foreground">{getCityName(p.city_id)}</TableCell>
                   <TableCell className="capitalize text-muted-foreground">{p.listing_type}</TableCell>
