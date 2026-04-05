@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -16,6 +16,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/components/ui/sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -70,10 +71,15 @@ const PropertiesList = () => {
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [listingTypeFilter, setListingTypeFilter] = useState("all");
+  const [conditionFilter, setConditionFilter] = useState("all");
+  const [minBedroomsFilter, setMinBedroomsFilter] = useState("any");
+  const [minPriceFilter, setMinPriceFilter] = useState("");
+  const [maxPriceFilter, setMaxPriceFilter] = useState("");
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
   const [deletingPropertyIds, setDeletingPropertyIds] = useState<string[]>([]);
   const [statusUpdatingPropertyIds, setStatusUpdatingPropertyIds] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
     open: false,
     propertyIds: [],
@@ -82,6 +88,25 @@ const PropertiesList = () => {
 
   const getPropertyCode = (property: Property) =>
     property.property_code || `P${property.id.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6).padEnd(6, "0")}`;
+
+  const hasActiveFilters =
+    cityFilter !== "all" ||
+    typeFilter !== "all" ||
+    listingTypeFilter !== "all" ||
+    conditionFilter !== "all" ||
+    minBedroomsFilter !== "any" ||
+    minPriceFilter.trim() !== "" ||
+    maxPriceFilter.trim() !== "";
+
+  const resetFilters = () => {
+    setCityFilter("all");
+    setTypeFilter("all");
+    setListingTypeFilter("all");
+    setConditionFilter("all");
+    setMinBedroomsFilter("any");
+    setMinPriceFilter("");
+    setMaxPriceFilter("");
+  };
 
   useEffect(() => {
     if (authLoading || !user) {
@@ -145,24 +170,62 @@ const PropertiesList = () => {
     };
   }, [authLoading, user]);
 
+  const getTypeName = (id: string) => propertyTypes.find((type) => type.id === id)?.name || id;
+  const getCityName = (id: string) => cities.find((city) => city.id === id)?.name || id;
+  const parseFilterNumber = (value: string) => {
+    const normalized = value.replace(/[,_\s]/g, "").trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+
+    return parsed;
+  };
+
   const filtered = properties.filter((p) => {
     if (search) {
       const term = search.toLowerCase();
       const matchesTitle = p.title.toLowerCase().includes(term);
-      const matchesCode = getPropertyCode(p).toLowerCase().includes(term);
-      if (!matchesTitle && !matchesCode) {
+      const matchesId =
+        getPropertyCode(p).toLowerCase().includes(term) || p.id.toLowerCase().includes(term);
+      const matchesType =
+        getTypeName(p.type_id).toLowerCase().includes(term) || p.type_id.toLowerCase().includes(term);
+      const matchesCity =
+        getCityName(p.city_id).toLowerCase().includes(term) || p.city_id.toLowerCase().includes(term);
+
+      if (!matchesTitle && !matchesId && !matchesType && !matchesCity) {
         return false;
       }
     }
 
     if (cityFilter !== "all" && p.city_id !== cityFilter) return false;
     if (typeFilter !== "all" && p.type_id !== typeFilter) return false;
-    if (statusFilter !== "all" && p.status !== statusFilter) return false;
+    if (listingTypeFilter !== "all" && p.listing_type !== listingTypeFilter) return false;
+    if (conditionFilter !== "all" && p.condition !== conditionFilter) return false;
+
+    if (minBedroomsFilter !== "any") {
+      const minBedrooms = Number(minBedroomsFilter);
+      if (Number.isFinite(minBedrooms) && p.bedrooms < minBedrooms) {
+        return false;
+      }
+    }
+
+    const minPrice = parseFilterNumber(minPriceFilter);
+    if (minPrice != null && p.price < minPrice) {
+      return false;
+    }
+
+    const maxPrice = parseFilterNumber(maxPriceFilter);
+    if (maxPrice != null && p.price > maxPrice) {
+      return false;
+    }
+
     return true;
   });
-
-  const getTypeName = (id: string) => propertyTypes.find((type) => type.id === id)?.name || id;
-  const getCityName = (id: string) => cities.find((city) => city.id === id)?.name || id;
 
   useEffect(() => {
     const availableIds = new Set(properties.map((property) => property.id));
@@ -402,31 +465,126 @@ const PropertiesList = () => {
         <div className="flex flex-wrap gap-2 p-3 pb-0">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search properties..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9 bg-muted/50 border-0" />
+            <Input placeholder="Search by ID, type, or city..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9 bg-muted/50 border-0" />
           </div>
-          <Select value={cityFilter} onValueChange={setCityFilter}>
-            <SelectTrigger className="w-[140px] h-9 bg-muted/50 border-0"><SelectValue placeholder="City" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Cities</SelectItem>
-              {cities.map((city) => <SelectItem key={city.id} value={city.id}>{city.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-[140px] h-9 bg-muted/50 border-0"><SelectValue placeholder="Type" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {propertyTypes.map((type) => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px] h-9 bg-muted/50 border-0"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="available">Available</SelectItem>
-              <SelectItem value="sold">Sold</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-            </SelectContent>
-          </Select>
+
+          <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className={`h-9 gap-2 ${hasActiveFilters ? "border-primary text-primary" : ""}`}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters
+                {hasActiveFilters ? <span className="text-xs">Active</span> : null}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[320px] p-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">Filter Properties</p>
+                  {hasActiveFilters ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={resetFilters}
+                    >
+                      Reset
+                    </Button>
+                  ) : null}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">City</p>
+                  <Select value={cityFilter} onValueChange={setCityFilter}>
+                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="City" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Cities</SelectItem>
+                      {cities.map((city) => <SelectItem key={city.id} value={city.id}>{city.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Property Type</p>
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Property Type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Property Types</SelectItem>
+                      {propertyTypes.map((type) => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Listing Type</p>
+                  <Select value={listingTypeFilter} onValueChange={setListingTypeFilter}>
+                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Listing Type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Listing Types</SelectItem>
+                      <SelectItem value="sale">Sale</SelectItem>
+                      <SelectItem value="rent">Rent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Condition</p>
+                  <Select value={conditionFilter} onValueChange={setConditionFilter}>
+                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Condition" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Conditions</SelectItem>
+                      <SelectItem value="new">New</SelectItem>
+                      <SelectItem value="used">Used</SelectItem>
+                      <SelectItem value="under_construction">Under Construction</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Min Bedrooms</p>
+                  <Select value={minBedroomsFilter} onValueChange={setMinBedroomsFilter}>
+                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Min Bedrooms" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any Bedrooms</SelectItem>
+                      <SelectItem value="1">1+</SelectItem>
+                      <SelectItem value="2">2+</SelectItem>
+                      <SelectItem value="3">3+</SelectItem>
+                      <SelectItem value="4">4+</SelectItem>
+                      <SelectItem value="5">5+</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Price Range</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="Min"
+                      value={minPriceFilter}
+                      onChange={(event) => setMinPriceFilter(event.target.value)}
+                      className="h-9 bg-muted/50 border-0"
+                      aria-label="Price range minimum"
+                    />
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="Max"
+                      value={maxPriceFilter}
+                      onChange={(event) => setMaxPriceFilter(event.target.value)}
+                      className="h-9 bg-muted/50 border-0"
+                      aria-label="Price range maximum"
+                    />
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
         {selectedPropertyIds.length > 0 ? (
           <div className="px-3 pt-2">
@@ -497,7 +655,7 @@ const PropertiesList = () => {
                     />
                   </TableCell>
                   <TableCell>
-                    <div className="h-11 w-16 overflow-hidden rounded-md border bg-muted/20">
+                    <div className="h-16 w-24 overflow-hidden rounded-md border bg-muted/20">
                       {p.main_image || p.images[0] ? (
                         <img
                           src={p.main_image || p.images[0]}
