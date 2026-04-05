@@ -7,6 +7,7 @@ import {
   Bath,
   BedDouble,
   Building2,
+  Camera,
   ChevronLeft,
   ChevronRight,
   Edit,
@@ -217,8 +218,8 @@ const PropertyDetail = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start gap-3">
+    <div className="space-y-7">
+      <div className="flex flex-wrap items-start gap-3 rounded-2xl border border-border/70 bg-gradient-to-r from-background to-muted/20 p-4 sm:p-5">
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild>
           <Link href="/properties"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
@@ -315,43 +316,13 @@ const PropertyDetail = () => {
         </div>
       </Card>
 
-      <Card className="border-border/70 shadow-sm">
-        <CardContent className="p-6 bg-gradient-to-br from-background via-background to-muted/25">
+      <Card className="border-border/70 shadow-sm bg-gradient-to-br from-background via-background to-muted/25">
+        <CardContent className="p-6">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Asking Price</p>
           <p className="text-3xl font-bold leading-tight mt-1">{priceLabel}</p>
-
-          <div className="flex flex-wrap gap-2 mt-3">
-            <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
-              {listingTypeLabel}
-            </span>
-            <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
-              {statusLabel}
-            </span>
-            <span className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
-              {conditionLabel}
-            </span>
-          </div>
-
-          <Separator className="my-5" />
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-lg border bg-background/75 p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Bedrooms</p>
-              <p className="text-lg font-semibold mt-1">{property.bedrooms}</p>
-            </div>
-            <div className="rounded-lg border bg-background/75 p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Bathrooms</p>
-              <p className="text-lg font-semibold mt-1">{property.bathrooms}</p>
-            </div>
-            <div className="rounded-lg border bg-background/75 p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Area Size</p>
-              <p className="text-lg font-semibold mt-1">{property.area_size} m2</p>
-            </div>
-            <div className="rounded-lg border bg-background/75 p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Floors</p>
-              <p className="text-lg font-semibold mt-1">{property.floors}</p>
-            </div>
-          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {paymentTypeLabel} payment
+          </p>
         </CardContent>
       </Card>
 
@@ -396,66 +367,72 @@ const PropertyDetail = () => {
         </DialogContent>
       </Dialog>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="border-border/70">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Ruler className="h-4 w-4" />
-              <span className="text-xs uppercase tracking-wide">Area Size</span>
+      <Card className="border-border/70 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Property Snapshot</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
+                <Ruler className="h-4 w-4" />
+                <span className="text-xs uppercase tracking-wide">Area Size</span>
+              </div>
+              <p className="text-lg font-semibold">{property.area_size} m2</p>
             </div>
-            <p className="text-lg font-semibold">{property.area_size} m2</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <BedDouble className="h-4 w-4" />
-              <span className="text-xs uppercase tracking-wide">Bedrooms</span>
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
+                <BedDouble className="h-4 w-4" />
+                <span className="text-xs uppercase tracking-wide">Bedrooms</span>
+              </div>
+              <p className="text-lg font-semibold">{property.bedrooms}</p>
             </div>
-            <p className="text-lg font-semibold">{property.bedrooms}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Bath className="h-4 w-4" />
-              <span className="text-xs uppercase tracking-wide">Bathrooms</span>
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
+                <Bath className="h-4 w-4" />
+                <span className="text-xs uppercase tracking-wide">Bathrooms</span>
+              </div>
+              <p className="text-lg font-semibold">{property.bathrooms}</p>
             </div>
-            <p className="text-lg font-semibold">{property.bathrooms}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Layers3 className="h-4 w-4" />
-              <span className="text-xs uppercase tracking-wide">Floors</span>
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
+                <Layers3 className="h-4 w-4" />
+                <span className="text-xs uppercase tracking-wide">Floors</span>
+              </div>
+              <p className="text-lg font-semibold">{property.floors}</p>
             </div>
-            <p className="text-lg font-semibold">{property.floors}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Layers3 className="h-4 w-4" />
-              <span className="text-xs uppercase tracking-wide">Balconies</span>
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
+                <Layers3 className="h-4 w-4" />
+                <span className="text-xs uppercase tracking-wide">Balconies</span>
+              </div>
+              <p className="text-lg font-semibold">{property.balconies}</p>
             </div>
-            <p className="text-lg font-semibold">{property.balconies}</p>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <div className="space-y-6">
-          <Card className="border-border/70">
+          <Card className="border-border/70 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Location</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <LocationPreviewMap coordinates={coordinates} />
+              <div className="rounded-2xl border bg-gradient-to-b from-muted/30 to-background p-2.5">
+                <div className="mb-2 flex items-center justify-between rounded-lg border bg-background px-3 py-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Camera className="h-3.5 w-3.5" />
+                    Map Camera View
+                  </span>
+                  {coordinates ? (
+                    <span className="text-[11px] text-muted-foreground">
+                      {coordinates.lat.toFixed(5)}, {coordinates.lng.toFixed(5)}
+                    </span>
+                  ) : null}
+                </div>
+                <LocationPreviewMap coordinates={coordinates} />
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="City" value={cityName} />
@@ -483,11 +460,11 @@ const PropertyDetail = () => {
             </CardContent>
           </Card>
 
-          <Card className="border-border/70">
+          <Card className="border-border/70 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Description</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-3">
+            <CardContent className="space-y-3">
               <div className="rounded-lg border bg-muted/20 p-3">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">English</p>
                 <p className="text-sm mt-1 whitespace-pre-wrap">{property.description_en || "—"}</p>
