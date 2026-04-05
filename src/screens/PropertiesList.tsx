@@ -59,6 +59,8 @@ const STATUS_META: Record<
   },
 };
 
+const PROPERTIES_PAGE_SIZE = 10;
+
 const PropertiesList = () => {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -72,6 +74,7 @@ const PropertiesList = () => {
   const [cityFilter, setCityFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [listingTypeFilter, setListingTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [conditionFilter, setConditionFilter] = useState("all");
   const [minBedroomsFilter, setMinBedroomsFilter] = useState("any");
   const [minPriceFilter, setMinPriceFilter] = useState("");
@@ -80,6 +83,7 @@ const PropertiesList = () => {
   const [deletingPropertyIds, setDeletingPropertyIds] = useState<string[]>([]);
   const [statusUpdatingPropertyIds, setStatusUpdatingPropertyIds] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
     open: false,
     propertyIds: [],
@@ -93,6 +97,7 @@ const PropertiesList = () => {
     cityFilter !== "all" ||
     typeFilter !== "all" ||
     listingTypeFilter !== "all" ||
+    statusFilter !== "all" ||
     conditionFilter !== "all" ||
     minBedroomsFilter !== "any" ||
     minPriceFilter.trim() !== "" ||
@@ -102,6 +107,7 @@ const PropertiesList = () => {
     setCityFilter("all");
     setTypeFilter("all");
     setListingTypeFilter("all");
+    setStatusFilter("all");
     setConditionFilter("all");
     setMinBedroomsFilter("any");
     setMinPriceFilter("");
@@ -205,6 +211,7 @@ const PropertiesList = () => {
     if (cityFilter !== "all" && p.city_id !== cityFilter) return false;
     if (typeFilter !== "all" && p.type_id !== typeFilter) return false;
     if (listingTypeFilter !== "all" && p.listing_type !== listingTypeFilter) return false;
+    if (statusFilter !== "all" && p.status !== statusFilter) return false;
     if (conditionFilter !== "all" && p.condition !== conditionFilter) return false;
 
     if (minBedroomsFilter !== "any") {
@@ -228,6 +235,20 @@ const PropertiesList = () => {
   });
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    search,
+    cityFilter,
+    typeFilter,
+    listingTypeFilter,
+    statusFilter,
+    conditionFilter,
+    minBedroomsFilter,
+    minPriceFilter,
+    maxPriceFilter,
+  ]);
+
+  useEffect(() => {
     const availableIds = new Set(properties.map((property) => property.id));
     setSelectedPropertyIds((current) => {
       const next = current.filter((id) => availableIds.has(id));
@@ -235,15 +256,27 @@ const PropertiesList = () => {
     });
   }, [properties]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PROPERTIES_PAGE_SIZE));
+  const activePage = Math.min(currentPage, totalPages);
+  const startIndex = (activePage - 1) * PROPERTIES_PAGE_SIZE;
+  const endIndexExclusive = startIndex + PROPERTIES_PAGE_SIZE;
+  const paginatedProperties = filtered.slice(startIndex, endIndexExclusive);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const selectedIdSet = new Set(selectedPropertyIds);
-  const filteredIds = filtered.map((property) => property.id);
-  const filteredIdSet = new Set(filteredIds);
+  const visiblePropertyIds = paginatedProperties.map((property) => property.id);
+  const visiblePropertyIdSet = new Set(visiblePropertyIds);
   const deletingIdSet = new Set(deletingPropertyIds);
   const statusUpdatingIdSet = new Set(statusUpdatingPropertyIds);
-  const allFilteredSelected =
-    filteredIds.length > 0 && filteredIds.every((id) => selectedIdSet.has(id));
-  const someFilteredSelected =
-    filteredIds.some((id) => selectedIdSet.has(id)) && !allFilteredSelected;
+  const allVisibleSelected =
+    visiblePropertyIds.length > 0 && visiblePropertyIds.every((id) => selectedIdSet.has(id));
+  const someVisibleSelected =
+    visiblePropertyIds.some((id) => selectedIdSet.has(id)) && !allVisibleSelected;
   const dialogPropertyCount = deleteDialog.propertyIds.length;
   const dialogIsDeleting = deleteDialog.propertyIds.some((id) => deletingIdSet.has(id));
   const dialogIsBulkDelete = dialogPropertyCount > 1;
@@ -262,17 +295,17 @@ const PropertiesList = () => {
       ? "Delete Selected"
       : "Delete Property";
 
-  const toggleSelectAllFiltered = (checked: boolean | "indeterminate") => {
+  const toggleSelectAllVisible = (checked: boolean | "indeterminate") => {
     if (checked === true) {
       setSelectedPropertyIds((current) => {
         const next = new Set(current);
-        filteredIds.forEach((id) => next.add(id));
+        visiblePropertyIds.forEach((id) => next.add(id));
         return Array.from(next);
       });
       return;
     }
 
-    setSelectedPropertyIds((current) => current.filter((id) => !filteredIdSet.has(id)));
+    setSelectedPropertyIds((current) => current.filter((id) => !visiblePropertyIdSet.has(id)));
   };
 
   const togglePropertySelection = (propertyId: string, checked: boolean | "indeterminate") => {
@@ -532,6 +565,19 @@ const PropertiesList = () => {
                 </div>
 
                 <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Status</p>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Status" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="available">Available</SelectItem>
+                      <SelectItem value="sold">Sold</SelectItem>
+                      <SelectItem value="archived">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">Condition</p>
                   <Select value={conditionFilter} onValueChange={setConditionFilter}>
                     <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Condition" /></SelectTrigger>
@@ -620,112 +666,146 @@ const PropertiesList = () => {
             <EmptyState title="No properties found" description="Try adjusting your filters or add a new property." action={<Button asChild><Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link></Button>} />
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[44px]">
-                  <Checkbox
-                    checked={allFilteredSelected ? true : someFilteredSelected ? "indeterminate" : false}
-                    onCheckedChange={toggleSelectAllFiltered}
-                    aria-label="Select all properties"
-                  />
-                </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Thumbnail</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Property ID</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">City</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Listing</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Price</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
-                <TableHead className="w-[100px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((p) => (
-                <TableRow
-                  key={p.id}
-                  className={`group cursor-pointer ${selectedIdSet.has(p.id) ? "bg-muted/30" : ""}`}
-                  onClick={() => router.push(`/properties/${p.id}`)}
-                >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[44px]">
                     <Checkbox
-                      checked={selectedIdSet.has(p.id)}
-                      onCheckedChange={(checked) => togglePropertySelection(p.id, checked)}
-                      aria-label={`Select ${p.title}`}
+                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                      onCheckedChange={toggleSelectAllVisible}
+                      aria-label="Select all properties on current page"
                     />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-16 w-24 overflow-hidden rounded-md border bg-muted/20">
-                      {p.main_image || p.images[0] ? (
-                        <img
-                          src={p.main_image || p.images[0]}
-                          alt={`${p.title} thumbnail`}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                          No image
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs font-semibold text-muted-foreground">
-                    {getPropertyCode(p)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{getTypeName(p.type_id)}</TableCell>
-                  <TableCell className="text-muted-foreground">{getCityName(p.city_id)}</TableCell>
-                  <TableCell className="capitalize text-muted-foreground">{p.listing_type}</TableCell>
-                  <TableCell className="font-medium">{p.currency} {p.price.toLocaleString()}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {(() => {
-                      const statusMeta = STATUS_META[p.status];
-
-                      return (
-                    <Select
-                      value={p.status}
-                      onValueChange={(value) => {
-                        void handlePropertyStatusChange(p, value);
-                      }}
-                      disabled={deletingIdSet.has(p.id) || statusUpdatingIdSet.has(p.id)}
-                    >
-                      <SelectTrigger className={`h-8 w-[142px] border ${statusMeta.triggerClassName}`}>
-                        <div className="flex items-center gap-2">
-                          <span className={`h-2 w-2 rounded-full ${statusMeta.dotClassName}`} />
-                          <SelectValue placeholder="Status" />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="available">{STATUS_META.available.label}</SelectItem>
-                        <SelectItem value="sold">{STATUS_META.sold.label}</SelectItem>
-                        <SelectItem value="archived">{STATUS_META.archived.label}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="sm" className="h-7 text-xs" asChild onClick={e => e.stopPropagation()}><Link href={`/properties/${p.id}`}>View</Link></Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs" asChild onClick={e => e.stopPropagation()}><Link href={`/properties/${p.id}/edit`}>Edit</Link></Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs text-destructive hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openSingleDeleteDialog(p);
-                        }}
-                        disabled={deletingIdSet.has(p.id)}
-                      >
-                        {deletingIdSet.has(p.id) ? "Deleting..." : "Delete"}
-                      </Button>
-                    </div>
-                  </TableCell>
+                  </TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Thumbnail</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Property ID</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">City</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Listing</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Price</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                  <TableHead className="w-[100px]"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {paginatedProperties.map((p) => (
+                  <TableRow
+                    key={p.id}
+                    className={`group cursor-pointer ${selectedIdSet.has(p.id) ? "bg-muted/30" : ""}`}
+                    onClick={() => router.push(`/properties/${p.id}`)}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIdSet.has(p.id)}
+                        onCheckedChange={(checked) => togglePropertySelection(p.id, checked)}
+                        aria-label={`Select ${p.title}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-16 w-24 overflow-hidden rounded-md border bg-muted/20">
+                        {p.main_image || p.images[0] ? (
+                          <img
+                            src={p.main_image || p.images[0]}
+                            alt={`${p.title} thumbnail`}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                            No image
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs font-semibold text-muted-foreground">
+                      {getPropertyCode(p)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{getTypeName(p.type_id)}</TableCell>
+                    <TableCell className="text-muted-foreground">{getCityName(p.city_id)}</TableCell>
+                    <TableCell className="capitalize text-muted-foreground">{p.listing_type}</TableCell>
+                    <TableCell className="font-medium">{p.currency} {p.price.toLocaleString()}</TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {(() => {
+                        const statusMeta = STATUS_META[p.status];
+
+                        return (
+                      <Select
+                        value={p.status}
+                        onValueChange={(value) => {
+                          void handlePropertyStatusChange(p, value);
+                        }}
+                        disabled={deletingIdSet.has(p.id) || statusUpdatingIdSet.has(p.id)}
+                      >
+                        <SelectTrigger className={`h-8 w-[142px] border ${statusMeta.triggerClassName}`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full ${statusMeta.dotClassName}`} />
+                            <SelectValue placeholder="Status" />
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="available">{STATUS_META.available.label}</SelectItem>
+                          <SelectItem value="sold">{STATUS_META.sold.label}</SelectItem>
+                          <SelectItem value="archived">{STATUS_META.archived.label}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild onClick={e => e.stopPropagation()}><Link href={`/properties/${p.id}`}>View</Link></Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild onClick={e => e.stopPropagation()}><Link href={`/properties/${p.id}/edit`}>Edit</Link></Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openSingleDeleteDialog(p);
+                          }}
+                          disabled={deletingIdSet.has(p.id)}
+                        >
+                          {deletingIdSet.has(p.id) ? "Deleting..." : "Delete"}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            <div className="flex flex-col gap-2 border-t px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">
+                Showing {startIndex + 1}-{Math.min(endIndexExclusive, filtered.length)} of {filtered.length} properties
+              </p>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={activePage === 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Page {activePage} of {totalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={activePage === totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </Card>
 
