@@ -58,7 +58,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const data = docSnap.data() || {};
+    const data = (docSnap.data() || {}) as Record<string, unknown>;
 
     const role: UserRole = isValidRole(data.role) ? data.role : "manager";
     const status: UserStatus = isValidStatus(data.status) ? data.status : "active";
@@ -69,7 +69,27 @@ export async function GET(request: Request) {
     const email =
       typeof data.email === "string" && data.email.trim() ? data.email : decodedToken.email;
 
-    await docRef.set({ full_name, email, role, status }, { merge: true });
+    const updates: Record<string, string> = {};
+
+    if (data.full_name !== full_name) {
+      updates.full_name = full_name;
+    }
+
+    if (data.email !== email) {
+      updates.email = email;
+    }
+
+    if (data.role !== role) {
+      updates.role = role;
+    }
+
+    if (data.status !== status) {
+      updates.status = status;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await docRef.set(updates, { merge: true });
+    }
 
     return Response.json({
       uid,

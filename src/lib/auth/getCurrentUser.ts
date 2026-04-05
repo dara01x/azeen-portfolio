@@ -25,8 +25,9 @@ async function waitForFirebaseUser(): Promise<FirebaseUser | null> {
   });
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
-  const firebaseUser = await waitForFirebaseUser();
+export async function getCurrentUser(firebaseUserInput?: FirebaseUser | null): Promise<AuthUser | null> {
+  const firebaseUser =
+    firebaseUserInput === undefined ? await waitForFirebaseUser() : firebaseUserInput;
   if (!firebaseUser || !firebaseUser.email) {
     return null;
   }

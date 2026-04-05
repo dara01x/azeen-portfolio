@@ -21,7 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    const profile = await getCurrentUser();
+    const profile = await getCurrentUser(auth.currentUser);
 
     if (!profile || profile.status !== "active") {
       setUser(null);
@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const profile = await getCurrentUser();
+        const profile = await getCurrentUser(firebaseUser);
 
         if (!profile || profile.status !== "active") {
           setUser(null);
