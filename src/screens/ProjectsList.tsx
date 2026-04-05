@@ -3,20 +3,39 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth/useAuth";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import type { AppVariableItem } from "@/modules/app-variables/types";
-import { getProjects as fetchProjects, updateProject as updateProjectById } from "@/modules/projects/project.client";
+import {
+  deleteProject as deleteProjectById,
+  getProjects as fetchProjects,
+  updateProject as updateProjectById,
+} from "@/modules/projects/project.client";
 import type { Project } from "@/types";
+
+type DeleteDialogState = {
+  open: boolean;
+  projectIds: string[];
+  subjectLabel: string;
+};
 
 const PROJECTS_PAGE_SIZE = 10;
 
@@ -82,8 +101,14 @@ const ProjectsList = () => {
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deletingProjectIds, setDeletingProjectIds] = useState<string[]>([]);
   const [statusUpdatingProjectIds, setStatusUpdatingProjectIds] = useState<string[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
+    open: false,
+    projectIds: [],
+    subjectLabel: "",
+  });
 
   const getProjectCode = (project: Project) =>
     `PJ${project.id.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6).padEnd(6, "0")}`;
@@ -286,11 +311,29 @@ const ProjectsList = () => {
   const selectedIdSet = new Set(selectedProjectIds);
   const visibleProjectIds = paginatedProjects.map((project) => project.id);
   const visibleProjectIdSet = new Set(visibleProjectIds);
+  const deletingIdSet = new Set(deletingProjectIds);
   const statusUpdatingIdSet = new Set(statusUpdatingProjectIds);
   const allVisibleSelected =
     visibleProjectIds.length > 0 && visibleProjectIds.every((id) => selectedIdSet.has(id));
   const someVisibleSelected =
     visibleProjectIds.some((id) => selectedIdSet.has(id)) && !allVisibleSelected;
+  const dialogProjectCount = deleteDialog.projectIds.length;
+  const dialogIsDeleting = deleteDialog.projectIds.some((id) => deletingIdSet.has(id));
+  const dialogIsBulkDelete = dialogProjectCount > 1;
+
+  const deleteDialogTitle = dialogIsBulkDelete
+    ? `Delete ${dialogProjectCount} Projects Permanently?`
+    : "Delete Project Permanently?";
+
+  const deleteDialogDescription = dialogIsBulkDelete
+    ? `This will remove ${dialogProjectCount} selected projects from Firestore and delete all their uploaded images from Firebase Storage. This action cannot be undone.`
+    : `This will remove ${deleteDialog.subjectLabel ? `"${deleteDialog.subjectLabel}"` : "this project"} from Firestore and delete all uploaded images from Firebase Storage. This action cannot be undone.`;
+
+  const deleteActionLabel = dialogIsDeleting
+    ? "Deleting..."
+    : dialogIsBulkDelete
+      ? "Delete Selected"
+      : "Delete Project";
 
   const toggleSelectAllVisible = (checked: boolean | "indeterminate") => {
     if (checked === true) {
@@ -315,6 +358,15 @@ const ProjectsList = () => {
     });
   };
 
+  const markDeletingIds = (ids: string[]) => {
+    setDeletingProjectIds((current) => Array.from(new Set([...current, ...ids])));
+  };
+
+  const unmarkDeletingIds = (ids: string[]) => {
+    const idsToRemove = new Set(ids);
+    setDeletingProjectIds((current) => current.filter((id) => !idsToRemove.has(id)));
+  };
+
   const markStatusUpdatingId = (id: string) => {
     setStatusUpdatingProjectIds((current) => (current.includes(id) ? current : [...current, id]));
   };
@@ -323,12 +375,115 @@ const ProjectsList = () => {
     setStatusUpdatingProjectIds((current) => current.filter((currentId) => currentId !== id));
   };
 
+  const closeDeleteDialog = () => {
+    setDeleteDialog({
+      open: false,
+      projectIds: [],
+      subjectLabel: "",
+    });
+  };
+
+  const openDeleteDialog = (projectIds: string[], subjectLabel = "") => {
+    if (projectIds.length === 0) {
+      return;
+    }
+
+    setDeleteDialog({
+      open: true,
+      projectIds: [...projectIds],
+      subjectLabel,
+    });
+  };
+
+  async function deleteProjectsByIds(projectIds: string[]) {
+    if (projectIds.length === 0) {
+      return;
+    }
+
+    markDeletingIds(projectIds);
+    setError("");
+
+    try {
+      const results = await Promise.allSettled(projectIds.map((projectId) => deleteProjectById(projectId)));
+
+      const deletedIds: string[] = [];
+      const failedIds: string[] = [];
+
+      results.forEach((result, index) => {
+        const projectId = projectIds[index];
+        if (result.status === "fulfilled") {
+          deletedIds.push(projectId);
+        } else {
+          failedIds.push(projectId);
+        }
+      });
+
+      if (deletedIds.length > 0) {
+        const deletedIdSet = new Set(deletedIds);
+        setProjects((current) => current.filter((item) => !deletedIdSet.has(item.id)));
+        setSelectedProjectIds((current) => current.filter((id) => !deletedIdSet.has(id)));
+      }
+
+      if (failedIds.length > 0) {
+        const errorMessage =
+          failedIds.length === 1
+            ? "1 selected project could not be deleted."
+            : `${failedIds.length} selected projects could not be deleted.`;
+
+        setError(errorMessage);
+        toast.error(errorMessage, {
+          style: {
+            background: "hsl(var(--destructive))",
+            color: "hsl(var(--destructive-foreground))",
+            borderColor: "hsl(var(--destructive))",
+          },
+        });
+      }
+
+      if (deletedIds.length > 0) {
+        const successMessage =
+          deletedIds.length === 1
+            ? "1 project deleted successfully."
+            : `${deletedIds.length} projects deleted successfully.`;
+
+        toast.success(successMessage);
+      }
+    } finally {
+      unmarkDeletingIds(projectIds);
+    }
+  }
+
+  const openSingleDeleteDialog = (project: Project) => {
+    if (deletingIdSet.has(project.id)) {
+      return;
+    }
+
+    openDeleteDialog([project.id], project.title);
+  };
+
+  const openSelectedDeleteDialog = () => {
+    if (selectedProjectIds.length === 0) {
+      return;
+    }
+
+    openDeleteDialog(selectedProjectIds);
+  };
+
+  async function handleConfirmDeleteDialog() {
+    if (dialogProjectCount === 0 || dialogIsDeleting) {
+      return;
+    }
+
+    await deleteProjectsByIds([...deleteDialog.projectIds]);
+    closeDeleteDialog();
+  }
+
   async function handleProjectStatusChange(project: Project, nextStatusValue: string) {
     if (!isProjectStatus(nextStatusValue)) {
       return;
     }
 
-    if (statusUpdatingIdSet.has(project.id) || project.status === nextStatusValue) {
+    if (deletingIdSet.has(project.id) || statusUpdatingIdSet.has(project.id) || project.status === nextStatusValue) {
       return;
     }
 
@@ -516,15 +671,26 @@ const ProjectsList = () => {
           <div className="px-3 pt-2">
             <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
               <p className="text-xs text-muted-foreground">{selectedProjectIds.length} selected</p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setSelectedProjectIds([])}
-              >
-                Clear selection
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={openSelectedDeleteDialog}
+                  disabled={selectedProjectIds.some((id) => deletingIdSet.has(id))}
+                >
+                  {selectedProjectIds.some((id) => deletingIdSet.has(id)) ? "Deleting..." : "Delete Selected"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setSelectedProjectIds([])}
+                >
+                  Clear selection
+                </Button>
+              </div>
             </div>
           </div>
         ) : null}
@@ -557,113 +723,124 @@ const ProjectsList = () => {
           </div>
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[44px]">
-                    <Checkbox
-                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
-                      onCheckedChange={toggleSelectAllVisible}
-                      aria-label="Select all projects on current page"
-                    />
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Thumbnail</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Project ID</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Project Name</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Property Type</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">City</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Units</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Starting Price</TableHead>
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
-                  <TableHead className="w-[90px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedProjects.map((project) => (
-                  <TableRow
-                    key={project.id}
-                    className={`group cursor-pointer ${selectedIdSet.has(project.id) ? "bg-muted/30" : ""}`}
-                    onClick={() => router.push(`/projects/${project.id}/edit`)}
-                  >
-                    <TableCell onClick={(event) => event.stopPropagation()}>
-                      <Checkbox
-                        checked={selectedIdSet.has(project.id)}
-                        onCheckedChange={(checked) => toggleProjectSelection(project.id, checked)}
-                        aria-label={`Select ${project.title}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="h-16 w-24 overflow-hidden rounded-md border bg-muted/20">
-                        {project.main_image || project.images[0] ? (
-                          <img
-                            src={project.main_image || project.images[0]}
-                            alt={`${project.title} thumbnail`}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                            No image
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs font-semibold text-muted-foreground">
-                      {getProjectCode(project)}
-                    </TableCell>
-                    <TableCell className="font-medium">{project.title}</TableCell>
-                    <TableCell className="text-muted-foreground">{getProjectTypeLabel(project)}</TableCell>
-                    <TableCell className="text-muted-foreground">{getCityName(project.city_id)}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {project.available_units}/{project.total_units}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {project.currency} {project.starting_price.toLocaleString()}
-                    </TableCell>
-                    <TableCell onClick={(event) => event.stopPropagation()}>
-                      {(() => {
-                        const statusMeta = STATUS_META[project.status];
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                  onCheckedChange={toggleSelectAllVisible}
+                  aria-label="Select all projects on current page"
+                />
+                <span className="text-xs text-muted-foreground">Select all on this page</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{paginatedProjects.length} cards on this page</p>
+            </div>
 
-                        return (
-                          <Select
-                            value={project.status}
-                            onValueChange={(value) => {
-                              void handleProjectStatusChange(project, value);
-                            }}
-                            disabled={statusUpdatingIdSet.has(project.id)}
-                          >
-                            <SelectTrigger className={`h-8 w-[142px] border ${statusMeta.triggerClassName}`}>
-                              <div className="flex items-center gap-2">
-                                <span className={`h-2 w-2 rounded-full ${statusMeta.dotClassName}`} />
-                                <SelectValue placeholder="Status" />
-                              </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="active">{STATUS_META.active.label}</SelectItem>
-                              <SelectItem value="completed">{STATUS_META.completed.label}</SelectItem>
-                              <SelectItem value="archived">{STATUS_META.archived.label}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <div className="opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+              {paginatedProjects.map((project) => {
+                const statusMeta = STATUS_META[project.status];
+
+                return (
+                  <div
+                    key={project.id}
+                    className={`group cursor-pointer overflow-hidden rounded-lg border bg-card transition-shadow hover:shadow-sm ${selectedIdSet.has(project.id) ? "ring-2 ring-primary/35" : ""}`}
+                    onClick={() => router.push(`/projects/${project.id}`)}
+                  >
+                    <div className="relative h-40 w-full overflow-hidden bg-muted/20">
+                      {project.main_image || project.images[0] ? (
+                        <img
+                          src={project.main_image || project.images[0]}
+                          alt={`${project.title} thumbnail`}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                          No image
+                        </div>
+                      )}
+
+                      <div className="absolute left-2 top-2" onClick={(event) => event.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIdSet.has(project.id)}
+                          onCheckedChange={(checked) => toggleProjectSelection(project.id, checked)}
+                          aria-label={`Select ${project.title}`}
+                        />
+                      </div>
+
+                      <div className="absolute right-2 top-2 rounded-md border bg-background/90 px-2 py-1 font-mono text-[11px] font-semibold text-muted-foreground">
+                        {getProjectCode(project)}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{project.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {getProjectTypeLabel(project)} • {getCityName(project.city_id)}
+                          </p>
+                        </div>
+                        <p className="whitespace-nowrap text-sm font-semibold">
+                          {project.currency} {project.starting_price.toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="rounded-md border bg-muted/30 px-2 py-1">
+                          Units {project.available_units}/{project.total_units}
+                        </span>
+                        <span className="rounded-md border bg-muted/30 px-2 py-1">
+                          {project.has_units ? "Has units" : "No units"}
+                        </span>
+                        {project.area_size > 0 ? <span>{project.area_size.toLocaleString()} m2</span> : null}
+                      </div>
+
+                      <div onClick={(event) => event.stopPropagation()}>
+                        <Select
+                          value={project.status}
+                          onValueChange={(value) => {
+                            void handleProjectStatusChange(project, value);
+                          }}
+                          disabled={deletingIdSet.has(project.id) || statusUpdatingIdSet.has(project.id)}
+                        >
+                          <SelectTrigger className={`h-8 w-full border ${statusMeta.triggerClassName}`}>
+                            <div className="flex items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full ${statusMeta.dotClassName}`} />
+                              <SelectValue placeholder="Status" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">{STATUS_META.active.label}</SelectItem>
+                            <SelectItem value="completed">{STATUS_META.completed.label}</SelectItem>
+                            <SelectItem value="archived">{STATUS_META.archived.label}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-1 pt-1" onClick={(event) => event.stopPropagation()}>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                          <Link href={`/projects/${project.id}`}>View</Link>
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                          <Link href={`/projects/${project.id}/edit`}>Edit</Link>
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 text-xs"
-                          asChild
-                          onClick={(event) => event.stopPropagation()}
+                          className="h-7 text-xs text-destructive hover:text-destructive"
+                          onClick={() => {
+                            openSingleDeleteDialog(project);
+                          }}
+                          disabled={deletingIdSet.has(project.id)}
                         >
-                          <Link href={`/projects/${project.id}/edit`}>Edit</Link>
+                          {deletingIdSet.has(project.id) ? "Deleting..." : "Delete"}
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
             <div className="flex flex-col gap-2 border-t px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
@@ -699,6 +876,35 @@ const ProjectsList = () => {
           </>
         )}
       </Card>
+
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => {
+          if (!open && !dialogIsDeleting) {
+            closeDeleteDialog();
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteDialogTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{deleteDialogDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={dialogIsDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={dialogIsDeleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmDeleteDialog();
+              }}
+            >
+              {deleteActionLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

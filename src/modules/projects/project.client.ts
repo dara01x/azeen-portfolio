@@ -97,6 +97,16 @@ export async function updateProject(id: string, data: Partial<Project>): Promise
   return payload.project;
 }
 
+export async function deleteProject(id: string): Promise<void> {
+  await authorizedJsonFetch<{ success: boolean }>(
+    "/api/projects/delete",
+    {
+      method: "DELETE",
+    },
+    { id },
+  );
+}
+
 export async function uploadProjectImageBlobUrls(
   projectId: string,
   urls: string[],
