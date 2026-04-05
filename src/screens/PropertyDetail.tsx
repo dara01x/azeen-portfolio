@@ -6,14 +6,15 @@ import {
   ArrowLeft,
   Bath,
   BedDouble,
-  Building2,
   Camera,
   ChevronLeft,
   ChevronRight,
   Edit,
   ImageIcon,
   Layers3,
+  PhoneCall,
   Ruler,
+  Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,10 +41,12 @@ const LocationPreviewMap = dynamic(
 );
 
 const Field = ({ label, value }: { label: string; value?: string | number | null }) => (
-  <div className="space-y-1">
-    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-    <p className="text-sm font-medium break-words">
-      {value === null || value === undefined || value === "" ? "—" : value}
+  <div className="space-y-0.5">
+    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">{label}</p>
+    <p className="text-sm font-semibold text-slate-800 break-words">
+      {value === null || value === undefined || value === "" ? (
+        <span className="text-slate-300 font-normal">—</span>
+      ) : value}
     </p>
   </div>
 );
@@ -77,6 +80,7 @@ const PropertyDetail = () => {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
+  const [activeDescriptionLang, setActiveDescriptionLang] = useState<"en" | "ku" | "ar">("en");
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
   const [amenities, setAmenities] = useState<AppVariableItem[]>([]);
@@ -170,7 +174,11 @@ const PropertyDetail = () => {
   }, [property]);
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading property...</p>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-pulse text-slate-400 text-sm">Loading property...</div>
+      </div>
+    );
   }
 
   if (error) {
@@ -199,6 +207,19 @@ const PropertyDetail = () => {
       ? { lat: property.lat, lng: property.lng }
       : null;
 
+  const relationRows = [
+    { label: "Project", value: property.project_id || "—" },
+    { label: "Owner Client", value: property.owner_client_id || "—" },
+    { label: "Assigned Company", value: property.assigned_company_id || "—" },
+  ];
+
+  const activeDescription =
+    activeDescriptionLang === "en"
+      ? property.description_en
+      : activeDescriptionLang === "ku"
+        ? property.description_ku
+        : property.description_ar;
+
   const showImageControls = images.length > 1;
 
   const showPreviousImage = () => {
@@ -218,48 +239,58 @@ const PropertyDetail = () => {
   };
 
   return (
-    <div className="space-y-7">
-      <div className="flex flex-wrap items-start gap-3 rounded-2xl border border-border/70 bg-gradient-to-r from-background to-muted/20 p-4 sm:p-5">
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild>
-          <Link href="/properties"><ArrowLeft className="h-4 w-4" /></Link>
-        </Button>
+    <div className="min-h-screen bg-slate-50/50">
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+              <Link href="/properties"><ArrowLeft className="h-4 w-4" /></Link>
+            </Button>
+            <p className="text-xs text-slate-400 font-medium">Properties / Property Details</p>
+          </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight truncate">Property Details</h1>
+          <div className="flex-1 min-w-0 flex items-center justify-center gap-2">
+            <p className="font-semibold text-slate-800 truncate">{typeName} · {listingTypeLabel}</p>
             <StatusBadge status={property.status} />
           </div>
-          <p className="text-sm text-muted-foreground mt-1">{typeName} · {listingTypeLabel} · {cityName}</p>
-        </div>
 
-        <Button asChild className="shrink-0">
-          <Link href={`/properties/${id}/edit`}><Edit className="mr-2 h-4 w-4" />Edit Property</Link>
-        </Button>
+          <Button asChild className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium">
+            <Link href={`/properties/${id}/edit`}><Edit className="h-4 w-4" />Edit Property</Link>
+          </Button>
+        </div>
       </div>
 
-      {lookupError ? <p className="text-sm text-destructive">{lookupError}</p> : null}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {lookupError ? <p className="text-sm text-destructive">{lookupError}</p> : null}
 
-      <Card className="overflow-hidden border-border/70 shadow-sm">
-        <div className="bg-muted/20 p-4 md:p-6">
-          <div className="flex flex-col space-y-4">
-            <div className="relative w-full">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
+          <Card className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden bg-white">
+            <div className="relative">
               {activeImage ? (
-                <button
-                  type="button"
-                  className="block w-full cursor-zoom-in"
-                  onClick={() => setIsImageZoomOpen(true)}
-                  aria-label="Zoom image"
-                >
-                  <img
-                    src={activeImage}
-                    alt={`Property image ${safeImageIndex + 1}`}
-                    className="w-full rounded-lg h-[18rem] md:h-[34rem] object-contain bg-muted/30"
-                  />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="block w-full cursor-zoom-in"
+                    onClick={() => setIsImageZoomOpen(true)}
+                    aria-label="Zoom image"
+                  >
+                    <img
+                      src={activeImage}
+                      alt={`Property image ${safeImageIndex + 1}`}
+                      className="h-[420px] w-full object-cover"
+                    />
+                  </button>
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/70 to-transparent" />
+                  {images.length > 0 ? (
+                    <span className="absolute bottom-4 right-4 bg-black/50 text-white text-xs px-3 py-1 rounded-full">
+                      {safeImageIndex + 1} / {images.length}
+                    </span>
+                  ) : null}
+                </>
               ) : (
-                <div className="h-[18rem] w-full rounded-lg border bg-muted/30 flex items-center justify-center text-muted-foreground">
+                <div className="h-[420px] w-full flex items-center justify-center text-muted-foreground bg-slate-50">
                   <div className="text-center">
-                    <ImageIcon className="h-9 w-9 mx-auto mb-2 opacity-40" />
+                    <ImageIcon className="h-10 w-10 mx-auto mb-2 opacity-40" />
                     <p className="text-sm">No image uploaded</p>
                   </div>
                 </div>
@@ -267,64 +298,354 @@ const PropertyDetail = () => {
 
               {showImageControls ? (
                 <>
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="absolute left-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-background/90"
+                  <button
+                    type="button"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 shadow-lg hover:bg-white flex items-center justify-center transition-all"
                     onClick={showPreviousImage}
                     aria-label="Previous image"
                   >
                     <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="absolute right-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-background/90"
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 shadow-lg hover:bg-white flex items-center justify-center transition-all"
                     onClick={showNextImage}
                     aria-label="Next image"
                   >
                     <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  </button>
                 </>
               ) : null}
             </div>
 
             {images.length > 1 ? (
-              <div className="grid w-full grid-cols-4 gap-4">
+              <div className="flex gap-2 p-3 overflow-x-auto bg-slate-50 border-t border-slate-100">
                 {images.map((imageUrl, index) => (
                   <img
                     key={`${imageUrl}-${index}`}
                     src={imageUrl}
                     alt={`Thumbnail ${index + 1}`}
-                    className={`rounded-lg md:h-24 h-14 w-full object-cover cursor-pointer hover:opacity-80 ${
-                      index === safeImageIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+                    className={`w-20 h-16 flex-shrink-0 rounded-lg object-cover cursor-pointer ring-2 transition-all ${
+                      index === safeImageIndex
+                        ? "ring-slate-800 ring-offset-1"
+                        : "ring-transparent hover:ring-slate-300"
                     }`}
                     onClick={() => setActiveImageIndex(index)}
                   />
                 ))}
               </div>
             ) : null}
+          </Card>
 
-            {images.length > 0 ? (
-              <div className="w-full flex justify-end text-xs text-muted-foreground">
-                <span>
-                  {safeImageIndex + 1} / {images.length}
-                </span>
+          <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-6 h-fit">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">ASKING PRICE</p>
+              <p className="text-4xl font-bold text-slate-900 mt-1">{priceLabel}</p>
+              <p className="text-sm text-slate-500 mt-1">{paymentTypeLabel}</p>
+            </div>
+
+            <Separator />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-slate-400 uppercase">City</p>
+                <p className="text-sm font-semibold text-slate-700">{cityName}</p>
               </div>
-            ) : null}
+              <div>
+                <p className="text-xs text-slate-400 uppercase">Type</p>
+                <p className="text-sm font-semibold text-slate-700">{typeName}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 uppercase">Condition</p>
+                <p className="text-sm font-semibold text-slate-700">{conditionLabel}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 uppercase">Ownership Type</p>
+                <p className="text-sm font-semibold text-slate-700">{ownershipTypeLabel}</p>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-2 text-slate-600">
+                <PhoneCall className="h-4 w-4" />
+                <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Contact</span>
+              </div>
+              <p className="font-semibold text-slate-800">{property.contact_name || "—"}</p>
+              <p className="text-sm text-slate-500">{property.primary_mobile_number || "—"}</p>
+              {property.secondary_mobile_number ? (
+                <p className="text-sm text-slate-500">{property.secondary_mobile_number}</p>
+              ) : null}
+            </div>
+
+            <Button asChild className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
+              <Link href={`/properties/${id}/edit`}><Edit className="h-4 w-4" />Edit Property</Link>
+            </Button>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
+            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+              <Ruler className="w-4 h-4 text-slate-600" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{property.area_size} m2</p>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Area Size</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
+            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+              <BedDouble className="w-4 h-4 text-slate-600" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{property.bedrooms}</p>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Bedrooms</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
+            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+              <Bath className="w-4 h-4 text-slate-600" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{property.bathrooms}</p>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Bathrooms</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
+            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+              <Layers3 className="w-4 h-4 text-slate-600" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{property.floors}</p>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Floors</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
+            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+              <Layers3 className="w-4 h-4 text-slate-600" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{property.balconies}</p>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Balconies</p>
           </div>
         </div>
-      </Card>
 
-      <Card className="border-border/70 shadow-sm bg-gradient-to-br from-background via-background to-muted/25">
-        <CardContent className="p-6">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Asking Price</p>
-          <p className="text-3xl font-bold leading-tight mt-1">{priceLabel}</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {paymentTypeLabel} payment
-          </p>
-        </CardContent>
-      </Card>
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
+          <div className="space-y-6">
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Location</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                    <Camera className="h-3.5 w-3.5" />
+                    Map Camera View
+                  </span>
+                  {coordinates ? (
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      {coordinates.lat.toFixed(5)}, {coordinates.lng.toFixed(5)}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="rounded-xl overflow-hidden">
+                  <LocationPreviewMap coordinates={coordinates} />
+                </div>
+
+                {coordinates ? (
+                  <p className="text-xs text-slate-400 font-mono">
+                    {coordinates.lat.toFixed(5)}, {coordinates.lng.toFixed(5)}
+                  </p>
+                ) : null}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-1">
+                    <p className="text-[10px] uppercase tracking-widest text-slate-400">Address (EN)</p>
+                    <p className="text-sm text-slate-700">{property.address_en || "—"}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-1">
+                    <p className="text-[10px] uppercase tracking-widest text-slate-400">Address (KU)</p>
+                    <p className="text-sm text-slate-700">{property.address_ku || "—"}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-1">
+                    <p className="text-[10px] uppercase tracking-widest text-slate-400">Address (AR)</p>
+                    <p className="text-sm text-slate-700">{property.address_ar || "—"}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Description</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
+                  <button
+                    type="button"
+                    className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                      activeDescriptionLang === "en"
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                    onClick={() => setActiveDescriptionLang("en")}
+                  >
+                    EN
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                      activeDescriptionLang === "ku"
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                    onClick={() => setActiveDescriptionLang("ku")}
+                  >
+                    KU
+                  </button>
+                  <button
+                    type="button"
+                    className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                      activeDescriptionLang === "ar"
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                    onClick={() => setActiveDescriptionLang("ar")}
+                  >
+                    AR
+                  </button>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-700 whitespace-pre-wrap min-h-[80px]">
+                  {activeDescription || "—"}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Internal Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {property.internal_notes ? (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-900 whitespace-pre-wrap">
+                    {property.internal_notes}
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-sm italic">No internal notes.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-6">
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Overview</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Type" value={typeName} />
+                  <Field label="Listing Type" value={listingTypeLabel} />
+                  <Field label="Status" value={statusLabel} />
+                  <Field label="Condition" value={conditionLabel} />
+                  <Field label="Ownership Type" value={ownershipTypeLabel} />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardContent className="p-5 space-y-4">
+                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3">Features & Amenities</p>
+                <Field label="View" value={viewName} />
+                <Separator />
+                <div>
+                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Amenities</p>
+                  {amenityNames.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {amenityNames.map((amenityName) => (
+                        <span
+                          key={amenityName}
+                          className="bg-slate-100 text-slate-700 rounded-lg px-3 py-1 text-xs font-medium"
+                        >
+                          {amenityName}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-slate-400 text-sm">No amenities selected.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Building Info</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Land Number" value={property.land_number} />
+                  <Field label="Total Floors" value={property.total_floors} />
+                  <Field label="Unit Floor Number" value={property.unit_floor_number} />
+                  <Field label="Building Name" value={property.building_name} />
+                  <Field label="Tower Number" value={property.tower_number} />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Contact Information</p>
+                <div className="grid grid-cols-1 gap-4">
+                  <Field label="Contact Name" value={property.contact_name} />
+                  <Field label="Primary Mobile Number" value={property.primary_mobile_number} />
+                  <Field label="Secondary Mobile Number" value={property.secondary_mobile_number} />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardContent className="p-5 space-y-4">
+                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3">Pricing & Media</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Price" value={property.price.toLocaleString()} />
+                  <Field label="Currency" value={property.currency} />
+                  <Field label="Payment Type" value={paymentTypeLabel} />
+                  <Field label="Listing" value={listingTypeLabel} />
+                </div>
+
+                <Separator />
+
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider inline-flex items-center gap-1.5">
+                    <Video className="h-3.5 w-3.5" />
+                    Video URL
+                  </p>
+                  {property.video_url ? (
+                    <a
+                      href={property.video_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-primary hover:underline break-all"
+                    >
+                      {property.video_url}
+                    </a>
+                  ) : (
+                    <p className="text-sm text-slate-400">No video attached.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-2">Relations</p>
+                <div>
+                  {relationRows.map((row) => (
+                    <div key={row.label} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                      <span className="text-xs text-slate-400 uppercase">{row.label}</span>
+                      <span className={`text-sm font-medium font-mono ${row.value === "—" ? "text-slate-300" : "text-slate-700"}`}>
+                        {row.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
 
       <Dialog open={isImageZoomOpen} onOpenChange={setIsImageZoomOpen}>
         <DialogContent className="max-w-[95vw] border-none bg-transparent p-0 shadow-none [&>button]:right-3 [&>button]:top-3 [&>button]:rounded-full [&>button]:bg-black/70 [&>button]:text-white [&>button]:opacity-100">
@@ -366,246 +687,6 @@ const PropertyDetail = () => {
           ) : null}
         </DialogContent>
       </Dialog>
-
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Property Snapshot</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
-                <Ruler className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-wide">Area Size</span>
-              </div>
-              <p className="text-lg font-semibold">{property.area_size} m2</p>
-            </div>
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
-                <BedDouble className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-wide">Bedrooms</span>
-              </div>
-              <p className="text-lg font-semibold">{property.bedrooms}</p>
-            </div>
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
-                <Bath className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-wide">Bathrooms</span>
-              </div>
-              <p className="text-lg font-semibold">{property.bathrooms}</p>
-            </div>
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
-                <Layers3 className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-wide">Floors</span>
-              </div>
-              <p className="text-lg font-semibold">{property.floors}</p>
-            </div>
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <div className="mb-1 flex items-center gap-2 text-muted-foreground">
-                <Layers3 className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-wide">Balconies</span>
-              </div>
-              <p className="text-lg font-semibold">{property.balconies}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-        <div className="space-y-6">
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Location</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-2xl border bg-gradient-to-b from-muted/30 to-background p-2.5">
-                <div className="mb-2 flex items-center justify-between rounded-lg border bg-background px-3 py-2">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <Camera className="h-3.5 w-3.5" />
-                    Map Camera View
-                  </span>
-                  {coordinates ? (
-                    <span className="text-[11px] text-muted-foreground">
-                      {coordinates.lat.toFixed(5)}, {coordinates.lng.toFixed(5)}
-                    </span>
-                  ) : null}
-                </div>
-                <LocationPreviewMap coordinates={coordinates} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="City" value={cityName} />
-                <Field label="Area" value={property.area} />
-                <Field label="Latitude" value={property.lat} />
-                <Field label="Longitude" value={property.lng} />
-              </div>
-
-              <Separator />
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Address (EN)</p>
-                  <p className="text-sm font-medium mt-1 break-words">{property.address_en || "—"}</p>
-                </div>
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Address (KU)</p>
-                  <p className="text-sm font-medium mt-1 break-words">{property.address_ku || "—"}</p>
-                </div>
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Address (AR)</p>
-                  <p className="text-sm font-medium mt-1 break-words">{property.address_ar || "—"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Description</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">English</p>
-                <p className="text-sm mt-1 whitespace-pre-wrap">{property.description_en || "—"}</p>
-              </div>
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Kurdish</p>
-                <p className="text-sm mt-1 whitespace-pre-wrap">{property.description_ku || "—"}</p>
-              </div>
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Arabic</p>
-                <p className="text-sm mt-1 whitespace-pre-wrap">{property.description_ar || "—"}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Internal Notes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{property.internal_notes || "—"}</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card className="border-border/70">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Overview</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <Field label="Type" value={typeName} />
-              <Field label="Listing Type" value={listingTypeLabel} />
-              <Field label="Status" value={statusLabel} />
-              <Field label="Condition" value={conditionLabel} />
-              <Field label="Ownership Type" value={ownershipTypeLabel} />
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Features & Amenities</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Field label="View" value={viewName} />
-              <Separator />
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Amenities</p>
-                {amenityNames.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {amenityNames.map((amenityName) => (
-                      <span
-                        key={amenityName}
-                        className="inline-flex items-center rounded-lg bg-primary/5 border border-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
-                      >
-                        {amenityName}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No amenities selected.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Building Info</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <Field label="Land Number" value={property.land_number} />
-              <Field label="Total Floors" value={property.total_floors} />
-              <Field label="Unit Floor Number" value={property.unit_floor_number} />
-              <Field label="Building Name" value={property.building_name} />
-              <Field label="Tower Number" value={property.tower_number} />
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Contact Information</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-4">
-              <Field label="Contact Name" value={property.contact_name} />
-              <Field label="Primary Mobile Number" value={property.primary_mobile_number} />
-              <Field label="Secondary Mobile Number" value={property.secondary_mobile_number} />
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Pricing & Media</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Price" value={property.price.toLocaleString()} />
-                <Field label="Currency" value={property.currency} />
-                <Field label="Payment Type" value={paymentTypeLabel} />
-                <Field label="Listing" value={listingTypeLabel} />
-              </div>
-
-              <Separator />
-
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Video URL</p>
-                {property.video_url ? (
-                  <a
-                    href={property.video_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium text-primary hover:underline break-all"
-                  >
-                    {property.video_url}
-                  </a>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No video attached.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Relations</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Building2 className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-wide">Linked Records</span>
-              </div>
-
-              <div className="grid gap-4">
-                <Field label="Project" value={property.project_id} />
-                <Field label="Owner Client" value={property.owner_client_id} />
-                <Field label="Assigned Company" value={property.assigned_company_id} />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
     </div>
   );
 };
