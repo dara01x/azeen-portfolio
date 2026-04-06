@@ -19,11 +19,12 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
+import { getProperties } from "@/modules/properties/property.client";
 import { getProjectById } from "@/modules/projects/project.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import type { AppVariableItem } from "@/modules/app-variables/types";
 import { useAuth } from "@/lib/auth/useAuth";
-import type { Project } from "@/types";
+import type { Project, Property } from "@/types";
 
 const Field = ({ label, value }: { label: string; value?: string | number | null }) => (
   <div className="space-y-0.5">
@@ -93,9 +94,11 @@ const ProjectDetail = () => {
   const id = Array.isArray(paramId) ? paramId[0] : paramId;
 
   const [project, setProject] = useState<Project | null>(null);
+  const [projectProperties, setProjectProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [unitDataError, setUnitDataError] = useState<string | null>(null);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
   const [amenities, setAmenities] = useState<AppVariableItem[]>([]);
@@ -128,6 +131,37 @@ const ProjectDetail = () => {
       .finally(() => {
         if (!cancelled) {
           setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, id, user]);
+
+  useEffect(() => {
+    if (authLoading || !user || !id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    setUnitDataError(null);
+
+    getProperties()
+      .then((items) => {
+        if (cancelled) {
+          return;
+        }
+
+        const relatedProperties = (items as Property[]).filter((property) => property.project_id === id);
+        setProjectProperties(relatedProperties);
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          const message = fetchError instanceof Error ? fetchError.message : "Failed to load project units.";
+          setUnitDataError(message);
+          setProjectProperties([]);
         }
       });
 
@@ -211,8 +245,10 @@ const ProjectDetail = () => {
   const typeLabel = typeNames.length > 0 ? typeNames.join(", ") : "N/A";
   const statusLabel = formatEnumLabel(project.status);
   const paymentTypeLabel = formatEnumLabel(project.payment_type);
-  const hasUnitsLabel = project.has_units ? "Yes" : "No";
-  const soldUnits = Math.max(project.total_units - project.available_units, 0);
+  const totalUnits = projectProperties.length;
+  const availableUnits = projectProperties.filter((property) => property.status === "available").length;
+  const soldUnits = projectProperties.filter((property) => property.status === "sold").length;
+  const hasUnitsLabel = totalUnits > 0 ? "Yes" : "No";
   const priceLabel = `${project.currency} ${project.starting_price.toLocaleString()}`;
 
   const activeDescription =
@@ -280,6 +316,7 @@ const ProjectDetail = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
         {lookupError ? <p className="text-sm text-destructive">{lookupError}</p> : null}
+        {unitDataError ? <p className="text-sm text-destructive">{unitDataError}</p> : null}
 
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
           <Card className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden bg-white">
@@ -417,7 +454,7 @@ const ProjectDetail = () => {
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
               <Layers3 className="w-4 h-4 text-slate-600" />
             </div>
-            <p className="text-2xl font-bold text-slate-900">{project.total_units}</p>
+            <p className="text-2xl font-bold text-slate-900">{totalUnits}</p>
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Total Units</p>
           </div>
 
@@ -425,7 +462,7 @@ const ProjectDetail = () => {
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
               <Building2 className="w-4 h-4 text-slate-600" />
             </div>
-            <p className="text-2xl font-bold text-slate-900">{project.available_units}</p>
+            <p className="text-2xl font-bold text-slate-900">{availableUnits}</p>
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Available Units</p>
           </div>
 
@@ -598,8 +635,8 @@ const ProjectDetail = () => {
                   <Field label="Starting Price" value={project.starting_price.toLocaleString()} />
                   <Field label="Currency" value={project.currency} />
                   <Field label="Payment Type" value={paymentTypeLabel} />
-                  <Field label="Total Units" value={project.total_units} />
-                  <Field label="Available Units" value={project.available_units} />
+                  <Field label="Total Units" value={totalUnits} />
+                  <Field label="Available Units" value={availableUnits} />
                   <Field label="Sold Units" value={soldUnits} />
                 </div>
               </CardContent>

@@ -116,32 +116,10 @@ export interface Project {
   contact_name: string;
   primary_mobile_number: string;
   secondary_mobile_number?: string;
-  total_units: number;
-  available_units: number;
   images: string[];
   main_image?: string;
   video_url?: string;
   assigned_company_id?: string;
-  has_units: boolean;
-  internal_notes?: string;
-}
-
-// Units
-export interface Unit {
-  id: string;
-  project_id: string;
-  title: string;
-  type_id: string;
-  status: "available" | "sold";
-  price: number;
-  currency: "USD" | "IQD";
-  payment_type: "cash" | "installment";
-  area_size: number;
-  bedrooms: number;
-  bathrooms: number;
-  floor_number: number;
-  images: string[];
-  main_image?: string;
   internal_notes?: string;
 }
 

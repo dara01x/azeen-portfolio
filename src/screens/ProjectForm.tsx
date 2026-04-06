@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { MultilingualInput } from "@/components/MultilingualInput";
 import { ImageUpload } from "@/components/ImageUpload";
@@ -99,10 +98,6 @@ function isValidCoordinates(lat?: number, lng?: number): boolean {
   return (!hasLat && !hasLng) || (hasLat && hasLng);
 }
 
-function hasNegativeNumber(value: number | undefined): boolean {
-  return typeof value === "number" && Number.isFinite(value) && value < 0;
-}
-
 function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   const uploadedImages: string[] = [];
   const localBlobImages: string[] = [];
@@ -163,10 +158,7 @@ const defaultProject: Omit<Project, "id"> = {
   amenities: [],
   contact_name: "",
   primary_mobile_number: "",
-  total_units: 0,
-  available_units: 0,
   images: [],
-  has_units: false,
   internal_notes: "",
 };
 
@@ -301,7 +293,6 @@ const ProjectForm = () => {
         setForm({
           ...defaultProject,
           ...rest,
-          has_units: typeof rest.has_units === "boolean" ? rest.has_units : false,
         });
       })
       .catch((loadError) => {
@@ -352,8 +343,6 @@ const ProjectForm = () => {
         contact_name: form.contact_name.trim(),
         primary_mobile_number: normalizedPrimaryMobileNumber,
         secondary_mobile_number: normalizedSecondaryMobileNumber || undefined,
-        total_units: Math.max(0, Number(form.total_units) || 0),
-        available_units: Math.max(0, Number(form.available_units) || 0),
         assigned_company_id: form.assigned_company_id || undefined,
         video_url: form.video_url?.trim() || undefined,
         internal_notes: form.internal_notes?.trim() || undefined,
@@ -381,14 +370,6 @@ const ProjectForm = () => {
 
       if (!payload.payment_type) {
         throw new Error("Payment method is required.");
-      }
-
-      if (hasNegativeNumber(payload.total_units) || hasNegativeNumber(payload.available_units)) {
-        throw new Error("Unit counts cannot be negative.");
-      }
-
-      if (payload.available_units > payload.total_units) {
-        throw new Error("Available units cannot exceed total units.");
       }
 
       if (!isValidCoordinates(payload.lat, payload.lng)) {
@@ -516,11 +497,6 @@ const ProjectForm = () => {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className="flex items-center gap-3 pt-6">
-                <Switch checked={form.has_units} onCheckedChange={(value) => update("has_units", value)} />
-                <Label>Has Units</Label>
               </div>
 
               <div className="sm:col-span-2">
@@ -740,29 +716,6 @@ const ProjectForm = () => {
                   value={form.secondary_mobile_number || ""}
                   onChange={(e) => update("secondary_mobile_number", e.target.value)}
                   placeholder="Optional"
-                />
-              </div>
-            </div>
-          </FormSection>
-
-          <FormSection title="Units">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Total Units</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={form.total_units || ""}
-                  onChange={(e) => update("total_units", Math.max(0, Number(e.target.value) || 0))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Available Units</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={form.available_units || ""}
-                  onChange={(e) => update("available_units", Math.max(0, Number(e.target.value) || 0))}
                 />
               </div>
             </div>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  Building2, FolderKanban, LayoutGrid, Users, UserCog, Settings, Database, BarChart3,
+  Building2, FolderKanban, Users, UserCog, Settings, Database, BarChart3,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -14,7 +14,6 @@ const mainNav = [
   { title: "Dashboard", url: "/", icon: BarChart3 },
   { title: "Properties", url: "/properties", icon: Building2 },
   { title: "Projects", url: "/projects", icon: FolderKanban },
-  { title: "Units", url: "/units", icon: LayoutGrid },
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Users", url: "/users", icon: UserCog },
 ];

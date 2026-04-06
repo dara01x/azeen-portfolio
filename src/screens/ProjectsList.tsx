@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search, SlidersHorizontal } from "lucide-react";
@@ -24,12 +24,13 @@ import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth/useAuth";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import type { AppVariableItem } from "@/modules/app-variables/types";
+import { getProperties as fetchProperties } from "@/modules/properties/property.client";
 import {
   deleteProject as deleteProjectById,
   getProjects as fetchProjects,
   updateProject as updateProjectById,
 } from "@/modules/projects/project.client";
-import type { Project } from "@/types";
+import type { Project, Property } from "@/types";
 
 type DeleteDialogState = {
   open: boolean;
@@ -83,6 +84,7 @@ const ProjectsList = () => {
   const { user, loading: authLoading } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
 
@@ -150,6 +152,7 @@ const ProjectsList = () => {
 
     if (!user) {
       setProjects([]);
+      setProperties([]);
       setLoading(false);
       return;
     }
@@ -160,13 +163,21 @@ const ProjectsList = () => {
       try {
         setLoading(true);
         setError("");
-        const result = await fetchProjects();
+        const [projectsResult, propertiesResult] = await Promise.allSettled([
+          fetchProjects(),
+          fetchProperties(),
+        ]);
 
         if (!mounted) {
           return;
         }
 
-        setProjects(result as Project[]);
+        setProjects(projectsResult.status === "fulfilled" ? (projectsResult.value as Project[]) : []);
+        setProperties(propertiesResult.status === "fulfilled" ? (propertiesResult.value as Property[]) : []);
+
+        if (projectsResult.status === "rejected" || propertiesResult.status === "rejected") {
+          setError("Some project data could not be loaded.");
+        }
       } catch (fetchError) {
         if (!mounted) {
           return;
@@ -187,6 +198,35 @@ const ProjectsList = () => {
       mounted = false;
     };
   }, [authLoading, user]);
+
+  const projectUnitStats = useMemo(() => {
+    const statsMap = new Map<string, { total: number; available: number; sold: number }>();
+
+    properties.forEach((property) => {
+      const projectId = property.project_id;
+      if (!projectId) {
+        return;
+      }
+
+      const current = statsMap.get(projectId) || { total: 0, available: 0, sold: 0 };
+      current.total += 1;
+
+      if (property.status === "available") {
+        current.available += 1;
+      }
+
+      if (property.status === "sold") {
+        current.sold += 1;
+      }
+
+      statsMap.set(projectId, current);
+    });
+
+    return statsMap;
+  }, [properties]);
+
+  const getProjectUnitStats = (projectId: string) =>
+    projectUnitStats.get(projectId) || { total: 0, available: 0, sold: 0 };
 
   useEffect(() => {
     if (authLoading || !user) {
@@ -249,11 +289,13 @@ const ProjectsList = () => {
       return false;
     }
 
-    if (hasUnitsFilter === "yes" && !project.has_units) {
+    const unitStats = getProjectUnitStats(project.id);
+
+    if (hasUnitsFilter === "yes" && unitStats.total === 0) {
       return false;
     }
 
-    if (hasUnitsFilter === "no" && project.has_units) {
+    if (hasUnitsFilter === "no" && unitStats.total > 0) {
       return false;
     }
 
@@ -738,6 +780,7 @@ const ProjectsList = () => {
             <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
               {paginatedProjects.map((project) => {
                 const statusMeta = STATUS_META[project.status];
+                const unitStats = getProjectUnitStats(project.id);
 
                 return (
                   <div
@@ -787,10 +830,10 @@ const ProjectsList = () => {
 
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span className="rounded-md border bg-muted/30 px-2 py-1">
-                          Units {project.available_units}/{project.total_units}
+                          Units {unitStats.available}/{unitStats.total}
                         </span>
                         <span className="rounded-md border bg-muted/30 px-2 py-1">
-                          {project.has_units ? "Has units" : "No units"}
+                          {unitStats.total > 0 ? "Has units" : "No units"}
                         </span>
                         {project.area_size > 0 ? <span>{project.area_size.toLocaleString()} m2</span> : null}
                       </div>

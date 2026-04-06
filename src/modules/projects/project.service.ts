@@ -25,10 +25,6 @@ function asNumber(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-function asBoolean(value: unknown, fallback = false) {
-  return typeof value === "boolean" ? value : fallback;
-}
-
 function asNullableNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -226,13 +222,10 @@ function normalizeProjectData(input: ProjectWriteInput) {
     contact_name: asString(input.contact_name),
     primary_mobile_number: asString(input.primary_mobile_number),
     secondary_mobile_number: asString(input.secondary_mobile_number),
-    total_units: asNumber(input.total_units),
-    available_units: asNumber(input.available_units),
     images,
     main_image: sanitizedMainImage || images[0] || "",
     video_url: asString(input.video_url),
     assigned_company_id: asString(input.assigned_company_id),
-    has_units: asBoolean(input.has_units),
     internal_notes: asString(input.internal_notes),
   };
 }
@@ -268,13 +261,10 @@ function mapDocToProjectRecord(id: string, data: Record<string, unknown>): Proje
     contact_name: asString(data.contact_name),
     primary_mobile_number: asString(data.primary_mobile_number),
     secondary_mobile_number: asString(data.secondary_mobile_number) || undefined,
-    total_units: asNumber(data.total_units),
-    available_units: asNumber(data.available_units),
     images,
     main_image: asString(data.main_image) || undefined,
     video_url: asString(data.video_url) || undefined,
     assigned_company_id: asString(data.assigned_company_id) || undefined,
-    has_units: asBoolean(data.has_units),
     internal_notes: asString(data.internal_notes) || undefined,
     coordinates: {
       lat: asNullableNumber(coordinates.lat ?? data.lat),

@@ -1,0 +1,91 @@
+UNITS MODULE RESTORE NOTES
+Created: 2026-04-06
+
+Purpose
+This file documents how to re-implement a dedicated Units module in the future.
+
+Current state (after Units removal)
+1) Dedicated Units UI is removed.
+2) Units routes are redirected to Properties:
+   - src/app/(portal)/units/page.tsx
+   - src/app/(portal)/units/new/page.tsx
+   - src/app/(portal)/units/[id]/edit/page.tsx
+3) Sidebar no longer shows Units:
+   - src/components/AppSidebar.tsx
+4) Unit metrics are now derived from Properties with project_id:
+   - src/screens/Dashboard.tsx
+   - src/screens/ProjectsList.tsx
+   - src/screens/ProjectDetail.tsx
+5) Project model no longer includes:
+   - total_units
+   - available_units
+   - has_units
+
+If we want Units again, implement in this order
+
+Step 1: Re-add Unit domain type
+- Add Unit interface back in src/types/index.ts.
+- Suggested fields (from previous model):
+  id, project_id, title, type_id, status, price, currency, payment_type,
+  area_size, bedrooms, bathrooms, floor_number, images, main_image, internal_notes.
+
+Step 2: Add Units backend (Firestore)
+- Create service layer (recommended): src/modules/units/unit.service.ts
+  - createUnit
+  - getUnits
+  - updateUnit
+  - deleteUnit
+- Create API routes:
+  - src/app/api/units/list/route.ts
+  - src/app/api/units/create/route.ts
+  - src/app/api/units/update/route.ts
+  - src/app/api/units/delete/route.ts
+- Use auth guard pattern already used by projects/properties/clients routes.
+
+Step 3: Add Units client API wrapper
+- Create: src/modules/units/unit.client.ts
+  - getUnits
+  - getUnitById
+  - createUnit
+  - updateUnit
+  - deleteUnit
+
+Step 4: Recreate Units screens
+- Recreate:
+  - src/screens/UnitsList.tsx
+  - src/screens/UnitForm.tsx
+- Reconnect pages:
+  - src/app/(portal)/units/page.tsx
+  - src/app/(portal)/units/new/page.tsx
+  - src/app/(portal)/units/[id]/edit/page.tsx
+
+Step 5: Re-enable navigation
+- Add Units nav item back to src/components/AppSidebar.tsx.
+
+Step 6: Decide source of truth (important)
+Choose one option and keep it consistent:
+A) Units collection is source of truth.
+   - Dashboard/project counters must read from Units collection.
+   - Properties may reference units or remain separate.
+B) Properties stay source of truth.
+   - Units becomes a UI layer/view over project-linked properties.
+   - Avoid duplicate data storage.
+
+Step 7: Data migration strategy
+If current project-linked properties should become units:
+- Create one unit per property where property.project_id is set.
+- Map status available/sold from property status.
+- Map pricing/details where possible.
+- Keep property_id on unit during migration for traceability.
+
+Step 8: Validation checklist
+- Units CRUD works with Firestore persistence.
+- Permissions/auth checks are enforced.
+- Dashboard counts match units source of truth.
+- Project detail/list unit counts are correct.
+- No stale redirects remain on /units pages.
+- Build passes and smoke tests cover new flows.
+
+Notes
+- If reintroducing Units, avoid storing duplicated counters in Project unless absolutely required.
+- Prefer deriving counters from live records to prevent mismatch bugs.

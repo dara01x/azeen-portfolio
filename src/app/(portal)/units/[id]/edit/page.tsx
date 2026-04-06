@@ -1,7 +1,5 @@
-"use client";
-
-import UnitForm from "@/screens/UnitForm";
+import { redirect } from "next/navigation";
 
 export default function EditUnitPage() {
-  return <UnitForm />;
+  redirect("/properties");
 }

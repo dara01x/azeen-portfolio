@@ -1,7 +1,5 @@
-"use client";
-
-import UnitsList from "@/screens/UnitsList";
+import { redirect } from "next/navigation";
 
 export default function UnitsPage() {
-  return <UnitsList />;
+  redirect("/properties");
 }
