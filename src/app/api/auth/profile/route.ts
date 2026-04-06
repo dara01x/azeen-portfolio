@@ -4,7 +4,19 @@ import type { UserRole, UserStatus } from "@/lib/auth/types";
 export const runtime = "nodejs";
 
 function isValidRole(role: unknown): role is UserRole {
-  return role === "owner" || role === "manager" || role === "company";
+  return role === "admin" || role === "company";
+}
+
+function normalizeRole(role: unknown): UserRole {
+  if (isValidRole(role)) {
+    return role;
+  }
+
+  if (role === "owner" || role === "manager") {
+    return "admin";
+  }
+
+  return "admin";
 }
 
 function isValidStatus(status: unknown): status is UserStatus {
@@ -67,7 +79,7 @@ export async function GET(request: Request) {
         auth_uid: uid,
         full_name: inferredName,
         email: decodedToken.email,
-        role: "manager" as UserRole,
+        role: "admin" as UserRole,
         status: "active" as UserStatus,
       };
 
@@ -81,7 +93,7 @@ export async function GET(request: Request) {
 
     const data = (profileDocSnap.data() || {}) as Record<string, unknown>;
 
-    const role: UserRole = isValidRole(data.role) ? data.role : "manager";
+    const role: UserRole = normalizeRole(data.role);
     const status: UserStatus = isValidStatus(data.status) ? data.status : "active";
     const full_name =
       typeof data.full_name === "string" && data.full_name.trim()

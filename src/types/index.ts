@@ -35,7 +35,7 @@ export interface User {
   id: string;
   full_name: string;
   email: string;
-  role: "owner" | "manager" | "company";
+  role: "admin" | "company";
   status: "active" | "disabled";
   phone: string;
   company_name?: string;

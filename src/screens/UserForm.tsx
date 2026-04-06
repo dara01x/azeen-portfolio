@@ -27,7 +27,7 @@ import {
 } from "@/modules/users/user.client";
 import type { User } from "@/types";
 
-const defaultUser: Omit<User, "id"> = { full_name: "", email: "", role: "manager", status: "active", phone: "" };
+const defaultUser: Omit<User, "id"> = { full_name: "", email: "", role: "admin", status: "active", phone: "" };
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -258,7 +258,7 @@ const UserForm = () => {
             <div className="space-y-2"><Label>Role</Label>
               <Select value={form.role} onValueChange={v => update("role", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="owner">Owner</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="company">Company</SelectItem></SelectContent>
+                <SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="company">Company</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label>Status</Label>

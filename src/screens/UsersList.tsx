@@ -24,8 +24,7 @@ import { deleteUser as deleteUserById, getUsers as fetchUsers } from "@/modules/
 import type { User } from "@/types";
 
 const roleColors: Record<User["role"], string> = {
-  owner: "bg-violet-100 text-violet-700 border-violet-200",
-  manager: "bg-blue-100 text-blue-700 border-blue-200",
+  admin: "bg-blue-100 text-blue-700 border-blue-200",
   company: "bg-amber-100 text-amber-700 border-amber-200",
 };
 
@@ -149,8 +148,7 @@ const UsersList = () => {
             <SelectTrigger className="w-[140px] h-9 bg-muted/50 border-0"><SelectValue placeholder="Role" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Roles</SelectItem>
-              <SelectItem value="owner">Owner</SelectItem>
-              <SelectItem value="manager">Manager</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
               <SelectItem value="company">Company</SelectItem>
             </SelectContent>
           </Select>

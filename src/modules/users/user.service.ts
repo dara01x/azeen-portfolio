@@ -18,11 +18,15 @@ function asString(value: unknown, fallback = "") {
 }
 
 function normalizeRole(value: unknown): User["role"] {
-  if (value === "owner" || value === "company") {
+  if (value === "company" || value === "admin") {
     return value;
   }
 
-  return "manager";
+  if (value === "owner" || value === "manager") {
+    return "admin";
+  }
+
+  return "admin";
 }
 
 function normalizeStatus(value: unknown): User["status"] {

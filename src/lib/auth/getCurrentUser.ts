@@ -5,7 +5,7 @@ import { auth } from "@/lib/firebase/client";
 import type { AuthUser, UserRole, UserStatus } from "@/lib/auth/types";
 
 function isValidRole(role: unknown): role is UserRole {
-  return role === "owner" || role === "manager" || role === "company";
+  return role === "admin" || role === "company";
 }
 
 function isValidStatus(status: unknown): status is UserStatus {
