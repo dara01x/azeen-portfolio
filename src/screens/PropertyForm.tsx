@@ -32,10 +32,11 @@ import {
   updateProperty,
   uploadPropertyImageBlobUrls,
 } from "@/modules/properties/property.client";
+import { getClients as fetchClients } from "@/modules/clients/client.client";
 import { getProjects } from "@/modules/projects/project.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
-import { mockClients, mockUsers } from "@/data/mock";
+import { mockUsers } from "@/data/mock";
 import type { Amenity, City, Client, Project, Property, PropertyType, User, ViewType } from "@/types";
 
 const LocationPickerMap = dynamic(
@@ -208,7 +209,7 @@ const PropertyForm = () => {
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [views, setViews] = useState<ViewType[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [clients] = useState<Client[]>(mockClients);
+  const [clients, setClients] = useState<Client[]>([]);
   const [companies] = useState<User[]>(() => mockUsers.filter((item) => item.role === "company"));
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(prev => ({ ...prev, [key]: value }));
@@ -254,6 +255,32 @@ const PropertyForm = () => {
       .finally(() => {
         if (!cancelled) {
           setLookupsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchClients()
+      .then((items) => {
+        if (!cancelled) {
+          setClients(items as Client[]);
+        }
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          const message = fetchError instanceof Error ? fetchError.message : "Failed to load clients.";
+          setLookupError((prev) => prev || message);
+          setClients([]);
         }
       });
 

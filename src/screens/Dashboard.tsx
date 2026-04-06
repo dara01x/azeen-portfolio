@@ -5,31 +5,76 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAuth } from "@/lib/auth/useAuth";
+import { getProperties } from "@/modules/properties/property.client";
 import { getProjects } from "@/modules/projects/project.client";
-import { mockProperties, mockClients, mockUnits, mockPropertyTypes, mockCities } from "@/data/mock";
+import { getClients } from "@/modules/clients/client.client";
+import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { PageHeader } from "@/components/PageHeader";
-import type { Project } from "@/types";
+import type { AppVariableItem } from "@/modules/app-variables/types";
+import type { Client, Project, Property } from "@/types";
 
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
+  const [cities, setCities] = useState<AppVariableItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authLoading || !user) {
+    if (authLoading) {
+      return;
+    }
+
+    if (!user) {
+      setProjects([]);
+      setProperties([]);
+      setClients([]);
+      setPropertyTypes([]);
+      setCities([]);
+      setLoading(false);
       return;
     }
 
     let cancelled = false;
 
-    getProjects()
-      .then((items) => {
-        if (!cancelled) {
-          setProjects(items as Project[]);
+    setLoading(true);
+    setError(null);
+
+    Promise.allSettled([
+      getProjects(),
+      getProperties(),
+      getClients(),
+      getVariables("property_types"),
+      getVariables("cities"),
+    ])
+      .then(([projectsResult, propertiesResult, clientsResult, propertyTypesResult, citiesResult]) => {
+        if (cancelled) {
+          return;
+        }
+
+        setProjects(projectsResult.status === "fulfilled" ? (projectsResult.value as Project[]) : []);
+        setProperties(propertiesResult.status === "fulfilled" ? (propertiesResult.value as Property[]) : []);
+        setClients(clientsResult.status === "fulfilled" ? (clientsResult.value as Client[]) : []);
+        setPropertyTypes(propertyTypesResult.status === "fulfilled" ? propertyTypesResult.value : []);
+        setCities(citiesResult.status === "fulfilled" ? citiesResult.value : []);
+
+        const hasAnyFailure =
+          projectsResult.status === "rejected" ||
+          propertiesResult.status === "rejected" ||
+          clientsResult.status === "rejected" ||
+          propertyTypesResult.status === "rejected" ||
+          citiesResult.status === "rejected";
+
+        if (hasAnyFailure) {
+          setError("Some dashboard data could not be loaded.");
         }
       })
-      .catch(() => {
+      .finally(() => {
         if (!cancelled) {
-          setProjects([]);
+          setLoading(false);
         }
       });
 
@@ -39,13 +84,20 @@ const Dashboard = () => {
   }, [authLoading, user]);
 
   const activeProjects = projects.filter((project) => project.status === "active");
+  const availableProperties = properties.filter((property) => property.status === "available").length;
+  const activeClients = clients.filter((client) => client.status === "active").length;
+  const totalUnits = projects.reduce((sum, project) => sum + Math.max(0, Number(project.total_units) || 0), 0);
+  const availableUnits = projects.reduce(
+    (sum, project) => sum + Math.max(0, Number(project.available_units) || 0),
+    0,
+  );
 
   const stats = [
     {
       label: "Total Properties",
-      value: mockProperties.length,
+      value: properties.length,
       icon: Building2,
-      change: "+2 this month",
+      change: `${availableProperties} available`,
       gradient: "from-primary/10 to-primary/5",
       iconBg: "bg-primary/10 text-primary",
       href: "/properties",
@@ -61,30 +113,33 @@ const Dashboard = () => {
     },
     {
       label: "Available Units",
-      value: mockUnits.filter((u) => u.status === "available").length,
+      value: availableUnits,
       icon: TrendingUp,
-      change: `of ${mockUnits.length} total`,
+      change: `of ${totalUnits} total`,
       gradient: "from-amber-50 to-amber-50/50",
       iconBg: "bg-amber-100 text-amber-600",
       href: "/units",
     },
     {
       label: "Active Clients",
-      value: mockClients.filter((c) => c.status === "active").length,
+      value: activeClients,
       icon: Users,
-      change: `${mockClients.length} total`,
+      change: `${clients.length} total`,
       gradient: "from-violet-50 to-violet-50/50",
       iconBg: "bg-violet-100 text-violet-600",
       href: "/clients",
     },
   ];
 
-  const getTypeName = (id: string) => mockPropertyTypes.find(t => t.id === id)?.name || "";
-  const getCityName = (id: string) => mockCities.find(c => c.id === id)?.name || "";
+  const getTypeName = (id: string) => propertyTypes.find((type) => type.id === id)?.name || id;
+  const getCityName = (id: string) => cities.find((city) => city.id === id)?.name || id;
 
   return (
     <div>
       <PageHeader title="Dashboard" description="Overview of your real estate operations" />
+
+      {loading ? <p className="mb-4 text-sm text-muted-foreground">Loading dashboard...</p> : null}
+      {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
 
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -119,25 +174,29 @@ const Dashboard = () => {
               </Button>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="divide-y">
-                {mockProperties.slice(0, 5).map((p) => (
-                  <Link href={`/properties/${p.id}`} key={p.id} className="flex items-center justify-between px-6 py-3.5 hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted shrink-0">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
+              {properties.length === 0 ? (
+                <div className="px-6 py-8 text-sm text-muted-foreground">No properties yet.</div>
+              ) : (
+                <div className="divide-y">
+                  {properties.slice(0, 5).map((p) => (
+                    <Link href={`/properties/${p.id}`} key={p.id} className="flex items-center justify-between px-6 py-3.5 hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted shrink-0">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{p.title}</p>
+                          <p className="text-xs text-muted-foreground">{getTypeName(p.type_id)} · {getCityName(p.city_id)}</p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{p.title}</p>
-                        <p className="text-xs text-muted-foreground">{getTypeName(p.type_id)} · {getCityName(p.city_id)}</p>
+                      <div className="flex items-center gap-3 shrink-0 ml-4">
+                        <span className="text-sm font-medium">{p.currency} {p.price.toLocaleString()}</span>
+                        <StatusBadge status={p.status} />
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0 ml-4">
-                      <span className="text-sm font-medium">{p.currency} {p.price.toLocaleString()}</span>
-                      <StatusBadge status={p.status} />
-                    </div>
-                  </Link>
-                ))}
-              </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -149,28 +208,32 @@ const Dashboard = () => {
               <CardTitle className="text-base font-semibold">Active Projects</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="divide-y">
-                {activeProjects.map((p) => (
-                  <Link href={`/projects/${p.id}/edit`} key={p.id} className="flex items-center justify-between px-6 py-3 hover:bg-muted/50 transition-colors">
-                    <div>
-                      <p className="text-sm font-medium">{p.title}</p>
-                      <p className="text-xs text-muted-foreground">{p.available_units} / {p.total_units} available</p>
-                    </div>
-                    <div className="h-2 w-16 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{
-                          width: `${
-                            p.total_units > 0
-                              ? ((p.total_units - p.available_units) / p.total_units) * 100
-                              : 0
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </Link>
-                ))}
-              </div>
+              {activeProjects.length === 0 ? (
+                <div className="px-6 py-8 text-sm text-muted-foreground">No active projects.</div>
+              ) : (
+                <div className="divide-y">
+                  {activeProjects.map((p) => (
+                    <Link href={`/projects/${p.id}/edit`} key={p.id} className="flex items-center justify-between px-6 py-3 hover:bg-muted/50 transition-colors">
+                      <div>
+                        <p className="text-sm font-medium">{p.title}</p>
+                        <p className="text-xs text-muted-foreground">{p.available_units} / {p.total_units} available</p>
+                      </div>
+                      <div className="h-2 w-16 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all"
+                          style={{
+                            width: `${
+                              p.total_units > 0
+                                ? ((p.total_units - p.available_units) / p.total_units) * 100
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
