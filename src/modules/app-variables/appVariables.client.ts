@@ -46,3 +46,23 @@ export async function createVariable(type: AppVariableType, name: string): Promi
 
   return payload.variable as AppVariableItem;
 }
+
+export async function updateVariable(
+  type: AppVariableType,
+  id: string,
+  name: string,
+): Promise<AppVariableItem> {
+  const payload = await authorizedJsonFetch("/api/app-variables/update", {
+    method: "PUT",
+    body: JSON.stringify({ type, id, name }),
+  });
+
+  return payload.variable as AppVariableItem;
+}
+
+export async function deleteVariable(type: AppVariableType, id: string): Promise<void> {
+  await authorizedJsonFetch("/api/app-variables/delete", {
+    method: "DELETE",
+    body: JSON.stringify({ type, id }),
+  });
+}

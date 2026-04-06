@@ -3,12 +3,23 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth/useAuth";
-import { createClient, getClientById, updateClient } from "@/modules/clients/client.client";
+import { createClient, deleteClient, getClientById, updateClient } from "@/modules/clients/client.client";
 import type { Client } from "@/types";
 
 const defaultClient: Omit<Client, "id"> = { full_name: "", primary_phone: "", status: "active" };
@@ -24,6 +35,8 @@ const ClientForm = () => {
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -83,7 +96,7 @@ const ClientForm = () => {
   }, [authLoading, id, isEdit, user]);
 
   const handleSubmit = async () => {
-    if (authLoading || saving || loading) {
+    if (authLoading || saving || loading || deleting) {
       return;
     }
 
@@ -133,6 +146,26 @@ const ClientForm = () => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!isEdit || !id || authLoading || !user || deleting) {
+      return;
+    }
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      await deleteClient(id);
+      setDeleteDialogOpen(false);
+      router.push("/clients");
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete client.";
+      setError(message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center gap-3 mb-8">
@@ -142,8 +175,38 @@ const ClientForm = () => {
           <p className="text-sm text-muted-foreground mt-0.5">{isEdit ? "Update client information" : "Add a new client to your database"}</p>
         </div>
         <div className="flex gap-2">
+          {isEdit ? (
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={saving || loading || deleting}>
+                  Delete Client
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Client Permanently?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove this client from your database. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={deleting}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void handleDelete();
+                    }}
+                  >
+                    {deleting ? "Deleting..." : "Delete Client"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
           <Button variant="outline" asChild><Link href="/clients">Cancel</Link></Button>
-          <Button onClick={() => void handleSubmit()} disabled={saving || loading}>{saving ? "Saving..." : isEdit ? "Save Changes" : "Create Client"}</Button>
+          <Button onClick={() => void handleSubmit()} disabled={saving || loading || deleting}>{saving ? "Saving..." : isEdit ? "Save Changes" : "Create Client"}</Button>
         </div>
       </div>
 
@@ -163,7 +226,7 @@ const ClientForm = () => {
           </Card>
           <div className="flex justify-end gap-3 pb-8">
             <Button variant="outline" asChild><Link href="/clients">Cancel</Link></Button>
-            <Button onClick={() => void handleSubmit()} size="lg" disabled={saving || loading}>{saving ? "Saving..." : isEdit ? "Save Changes" : "Create Client"}</Button>
+            <Button onClick={() => void handleSubmit()} size="lg" disabled={saving || loading || deleting}>{saving ? "Saving..." : isEdit ? "Save Changes" : "Create Client"}</Button>
           </div>
         </div>
       )}

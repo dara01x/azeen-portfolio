@@ -2,13 +2,23 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/lib/auth/useAuth";
-import { getClients as fetchClients } from "@/modules/clients/client.client";
+import { deleteClient as deleteClientById, getClients as fetchClients } from "@/modules/clients/client.client";
 import type { Client } from "@/types";
 
 const ClientsList = () => {
@@ -17,6 +27,9 @@ const ClientsList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [deletingClientId, setDeletingClientId] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) {
@@ -63,6 +76,33 @@ const ClientsList = () => {
     return true;
   });
 
+  function openDeleteDialog(client: Client) {
+    setSelectedClient(client);
+    setDeleteDialogOpen(true);
+  }
+
+  async function handleConfirmDelete() {
+    if (!selectedClient || authLoading || !user) {
+      return;
+    }
+
+    setDeletingClientId(selectedClient.id);
+    setError(null);
+
+    try {
+      await deleteClientById(selectedClient.id);
+
+      setClients((current) => current.filter((client) => client.id !== selectedClient.id));
+      setDeleteDialogOpen(false);
+      setSelectedClient(null);
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete client.";
+      setError(message);
+    } finally {
+      setDeletingClientId(null);
+    }
+  }
+
   return (
     <div>
       <PageHeader title="Clients" description="Manage your client database" actions={<Button asChild><Link href="/clients/new"><Plus className="mr-2 h-4 w-4" />Add Client</Link></Button>} />
@@ -89,7 +129,7 @@ const ClientsList = () => {
               <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
               <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phone</TableHead>
               <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Notes</TableHead>
-              <TableHead className="w-[80px]"></TableHead>
+              <TableHead className="w-[140px]"></TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {filtered.map((c) => (
@@ -97,13 +137,65 @@ const ClientsList = () => {
                   <TableCell className="font-medium">{c.full_name}</TableCell>
                   <TableCell className="text-muted-foreground">{c.primary_phone}</TableCell>
                   <TableCell className="text-muted-foreground max-w-[320px] truncate">{c.notes || "—"}</TableCell>
-                  <TableCell><Button variant="ghost" size="sm" className="h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity" asChild><Link href={`/clients/${c.id}/edit`}>Edit</Link></Button></TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                        <Link href={`/clients/${c.id}/edit`}>Edit</Link>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => openDeleteDialog(c)}
+                        disabled={deletingClientId === c.id}
+                      >
+                        {deletingClientId === c.id ? "Deleting..." : "Delete"}
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
       </Card>
+
+      <AlertDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && deletingClientId) {
+            return;
+          }
+
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setSelectedClient(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Client Permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove {selectedClient ? `"${selectedClient.full_name}"` : "this client"} from your
+              database. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!deletingClientId}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!!deletingClientId}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmDelete();
+              }}
+            >
+              {deletingClientId ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

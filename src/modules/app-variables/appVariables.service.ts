@@ -57,3 +57,53 @@ export async function getVariables(typeInput: string): Promise<AppVariableItem[]
     .map((doc) => mapDocToItem(doc.id, doc.data()))
     .filter((item) => item.name.length > 0);
 }
+
+export async function updateVariable(
+  typeInput: string,
+  idInput: string,
+  nameInput: string,
+): Promise<AppVariableItem> {
+  const type = normalizeType(typeInput);
+  const id = idInput.trim();
+  const name = nameInput.trim();
+
+  if (!id) {
+    throw new Error("Variable id is required.");
+  }
+
+  if (!name) {
+    throw new Error("Name is required.");
+  }
+
+  const db = getAdminDb();
+  const docRef = db.collection(type).doc(id);
+  const existing = await docRef.get();
+
+  if (!existing.exists) {
+    throw new Error("Variable not found.");
+  }
+
+  await docRef.set({ name }, { merge: true });
+
+  const updated = await docRef.get();
+  return mapDocToItem(updated.id, updated.data() || {});
+}
+
+export async function deleteVariable(typeInput: string, idInput: string): Promise<void> {
+  const type = normalizeType(typeInput);
+  const id = idInput.trim();
+
+  if (!id) {
+    throw new Error("Variable id is required.");
+  }
+
+  const db = getAdminDb();
+  const docRef = db.collection(type).doc(id);
+  const existing = await docRef.get();
+
+  if (!existing.exists) {
+    throw new Error("Variable not found.");
+  }
+
+  await docRef.delete();
+}
