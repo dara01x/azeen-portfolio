@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Building2, TrendingUp, Users, FolderKanban, ArrowUpRight, ArrowRight, Plus } from "lucide-react";
+import { Building2, Users, FolderKanban, ArrowUpRight, ArrowRight, Plus } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -138,33 +138,6 @@ const Dashboard = () => {
   const activeProjects = projects.filter((project) => project.status === "active");
   const availableProperties = properties.filter((property) => property.status === "available").length;
   const activeClients = clients.filter((client) => client.status === "active").length;
-  const projectLinkedProperties = properties.filter((property) => Boolean(property.project_id));
-  const totalUnits = projectLinkedProperties.length;
-  const availableUnits = projectLinkedProperties.filter((property) => property.status === "available").length;
-  const projectUnitStats = useMemo(() => {
-    const statsMap = new Map<string, { total: number; available: number }>();
-
-    properties.forEach((property) => {
-      const projectId = property.project_id;
-      if (!projectId) {
-        return;
-      }
-
-      const current = statsMap.get(projectId) || { total: 0, available: 0 };
-      current.total += 1;
-
-      if (property.status === "available") {
-        current.available += 1;
-      }
-
-      statsMap.set(projectId, current);
-    });
-
-    return statsMap;
-  }, [properties]);
-
-  const getProjectUnitStats = (projectId: string) =>
-    projectUnitStats.get(projectId) || { total: 0, available: 0 };
 
   const activeStories = useMemo(
     () =>
@@ -194,15 +167,6 @@ const Dashboard = () => {
       gradient: "from-emerald-50 to-emerald-50/50",
       iconBg: "bg-emerald-100 text-emerald-600",
       href: "/projects",
-    },
-    {
-      label: "Available Units",
-      value: availableUnits,
-      icon: TrendingUp,
-      change: `of ${totalUnits} in projects`,
-      gradient: "from-amber-50 to-amber-50/50",
-      iconBg: "bg-amber-100 text-amber-600",
-      href: "/properties",
     },
     {
       label: "Active Clients",
@@ -340,7 +304,7 @@ const Dashboard = () => {
       </Card>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-8">
         {stats.map((s) => (
           <Link href={s.href} key={s.label} className="group">
             <Card className="relative overflow-hidden hover:shadow-md transition-all duration-200 hover:border-primary/20">
@@ -410,30 +374,15 @@ const Dashboard = () => {
                 <div className="px-6 py-8 text-sm text-muted-foreground">No active projects.</div>
               ) : (
                 <div className="divide-y">
-                  {activeProjects.map((p) => {
-                    const unitStats = getProjectUnitStats(p.id);
-
-                    return (
-                      <Link href={`/projects/${p.id}/edit`} key={p.id} className="flex items-center justify-between px-6 py-3 hover:bg-muted/50 transition-colors">
-                        <div>
-                          <p className="text-sm font-medium">{p.title}</p>
-                          <p className="text-xs text-muted-foreground">{unitStats.available} / {unitStats.total} available</p>
-                        </div>
-                        <div className="h-2 w-16 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{
-                              width: `${
-                                unitStats.total > 0
-                                  ? ((unitStats.total - unitStats.available) / unitStats.total) * 100
-                                  : 0
-                              }%`,
-                            }}
-                          />
-                        </div>
-                      </Link>
-                    );
-                  })}
+                  {activeProjects.map((p) => (
+                    <Link href={`/projects/${p.id}/edit`} key={p.id} className="flex items-center justify-between px-6 py-3 hover:bg-muted/50 transition-colors">
+                      <div>
+                        <p className="text-sm font-medium">{p.title}</p>
+                        <p className="text-xs text-muted-foreground">{getCityName(p.city_id)}</p>
+                      </div>
+                      <StatusBadge status={p.status} />
+                    </Link>
+                  ))}
                 </div>
               )}
             </CardContent>
