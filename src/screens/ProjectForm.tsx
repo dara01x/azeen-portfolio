@@ -15,7 +15,7 @@ import { ImageUpload } from "@/components/ImageUpload";
 import { useAuth } from "@/lib/auth/useAuth";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import type { AppVariableItem } from "@/modules/app-variables/types";
-import { mockUsers } from "@/data/mock";
+import { getUsers as fetchUsers } from "@/modules/users/user.client";
 import {
   createProject,
   getProjectById,
@@ -206,7 +206,7 @@ const ProjectForm = () => {
   const [cities, setCities] = useState<AppVariableItem[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [amenities, setAmenities] = useState<AppVariableItem[]>([]);
-  const [companies] = useState<User[]>(() => mockUsers.filter((item) => item.role === "company"));
+  const [companies, setCompanies] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
 
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
@@ -261,6 +261,34 @@ const ProjectForm = () => {
       .finally(() => {
         if (!cancelled) {
           setLookupsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchUsers()
+      .then((items) => {
+        if (!cancelled) {
+          setCompanies(
+            (items as User[]).filter((item) => item.role === "company" && item.status === "active"),
+          );
+        }
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          const message = fetchError instanceof Error ? fetchError.message : "Failed to load users.";
+          setLookupError((prev) => prev || message);
+          setCompanies([]);
         }
       });
 
