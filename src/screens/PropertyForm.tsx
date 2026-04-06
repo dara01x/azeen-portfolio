@@ -22,7 +22,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { MultilingualInput } from "@/components/MultilingualInput";
 import { ImageUpload } from "@/components/ImageUpload";
 import { toast } from "@/components/ui/sonner";
 import {
@@ -167,6 +166,16 @@ function hasOptionById(items: Array<{ id: string }>, id?: string) {
   }
 
   return items.some((item) => item.id === id);
+}
+
+function getPreferredText(...values: Array<string | undefined>) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  return "";
 }
 
 const defaultProperty: Omit<Property, "id"> = {
@@ -408,10 +417,26 @@ const PropertyForm = () => {
     try {
       const normalizedPrimaryMobileNumber = normalizePhoneNumber(form.primary_mobile_number);
       const normalizedSecondaryMobileNumber = normalizePhoneNumber(form.secondary_mobile_number || "");
+      const singleAddressValue = getPreferredText(
+        form.address_en,
+        form.address_ku,
+        form.address_ar,
+      ).trim();
+      const singleDescriptionValue = getPreferredText(
+        form.description_en,
+        form.description_ku,
+        form.description_ar,
+      ).trim();
 
       const payload: Omit<Property, "id"> = {
         ...form,
         title: form.title.trim() || buildInternalPropertyTitle(form, propertyTypes, cities),
+        address_en: singleAddressValue,
+        address_ku: singleAddressValue,
+        address_ar: singleAddressValue,
+        description_en: singleDescriptionValue,
+        description_ku: singleDescriptionValue,
+        description_ar: singleDescriptionValue,
         contact_name: form.contact_name.trim(),
         primary_mobile_number: normalizedPrimaryMobileNumber,
         secondary_mobile_number: normalizedSecondaryMobileNumber || undefined,
@@ -660,8 +685,18 @@ const PropertyForm = () => {
               </Select>
             </div>
             <div className="space-y-2"><Label>Area (Optional)</Label><Input value={form.area} onChange={e => update("area", e.target.value)} placeholder="e.g. Downtown" /></div>
-            <div className="sm:col-span-2">
-              <MultilingualInput label="Address (Optional)" values={{ en: form.address_en, ku: form.address_ku, ar: form.address_ar }} onChange={v => { update("address_en", v.en); update("address_ku", v.ku); update("address_ar", v.ar); }} />
+            <div className="sm:col-span-2 space-y-2">
+              <Label>Address (Optional)</Label>
+              <Input
+                value={getPreferredText(form.address_en, form.address_ku, form.address_ar)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  update("address_en", value);
+                  update("address_ku", value);
+                  update("address_ar", value);
+                }}
+                placeholder="Enter address in any language"
+              />
             </div>
             <Separator className="sm:col-span-2" />
             <div className="space-y-2"><Label>Latitude (Optional)</Label><Input type="number" step="any" value={form.lat ?? ""} onChange={e => update("lat", parseOptionalNumber(e.target.value))} placeholder="36.204824" /></div>
@@ -730,8 +765,21 @@ const PropertyForm = () => {
           </div>
         </FormSection>
 
-        <FormSection title="Description" description="Property description in multiple languages">
-          <MultilingualInput label="Description (Optional)" multiline values={{ en: form.description_en, ku: form.description_ku, ar: form.description_ar }} onChange={v => { update("description_en", v.en); update("description_ku", v.ku); update("description_ar", v.ar); }} />
+        <FormSection title="Description" description="Property description in any language">
+          <div className="space-y-2">
+            <Label>Description (Optional)</Label>
+            <Textarea
+              value={getPreferredText(form.description_en, form.description_ku, form.description_ar)}
+              onChange={(e) => {
+                const value = e.target.value;
+                update("description_en", value);
+                update("description_ku", value);
+                update("description_ar", value);
+              }}
+              rows={4}
+              placeholder="Enter description in any language"
+            />
+          </div>
         </FormSection>
 
         <FormSection title="Media" description="Upload images and add video links">

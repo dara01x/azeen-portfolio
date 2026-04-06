@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { MultilingualInput } from "@/components/MultilingualInput";
 import { ImageUpload } from "@/components/ImageUpload";
 import { useAuth } from "@/lib/auth/useAuth";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
@@ -123,6 +122,16 @@ function hasOptionById(items: Array<{ id: string }>, id?: string) {
   }
 
   return items.some((item) => item.id === id);
+}
+
+function getPreferredText(...values: Array<string | undefined>) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  return "";
 }
 
 function isProjectStatus(value: string): value is Project["status"] {
@@ -323,19 +332,31 @@ const ProjectForm = () => {
     try {
       const normalizedPrimaryMobileNumber = normalizePhoneNumber(form.primary_mobile_number || "");
       const normalizedSecondaryMobileNumber = normalizePhoneNumber(form.secondary_mobile_number || "");
+      const singleAddressValue = getPreferredText(
+        form.address_en,
+        form.address_ku,
+        form.address_ar,
+        form.address,
+      ).trim();
+      const singleDescriptionValue = getPreferredText(
+        form.description_en,
+        form.description_ku,
+        form.description_ar,
+        form.description,
+      ).trim();
 
       const payload: Omit<Project, "id"> = {
         ...form,
         title: form.title.trim(),
-        description: form.description_en.trim() || form.description.trim(),
-        description_en: form.description_en.trim(),
-        description_ku: form.description_ku.trim(),
-        description_ar: form.description_ar.trim(),
+        description: singleDescriptionValue,
+        description_en: singleDescriptionValue,
+        description_ku: singleDescriptionValue,
+        description_ar: singleDescriptionValue,
         area: form.area.trim(),
-        address: form.address_en.trim() || form.address.trim(),
-        address_en: form.address_en.trim(),
-        address_ku: form.address_ku.trim(),
-        address_ar: form.address_ar.trim(),
+        address: singleAddressValue,
+        address_en: singleAddressValue,
+        address_ku: singleAddressValue,
+        address_ar: singleAddressValue,
         property_type_ids: Array.from(new Set(form.property_type_ids.map((item) => item.trim()).filter(Boolean))),
         amenities: Array.from(new Set(form.amenities.map((item) => item.trim()).filter(Boolean))),
         area_size: Number(form.area_size) || 0,
@@ -605,16 +626,18 @@ const ProjectForm = () => {
                 <Input value={form.area} onChange={(e) => update("area", e.target.value)} />
               </div>
 
-              <div className="sm:col-span-2">
-                <MultilingualInput
-                  label="Address"
-                  values={{ en: form.address_en, ku: form.address_ku, ar: form.address_ar }}
-                  onChange={(value) => {
-                    update("address_en", value.en);
-                    update("address_ku", value.ku);
-                    update("address_ar", value.ar);
-                    update("address", value.en);
+              <div className="sm:col-span-2 space-y-2">
+                <Label>Address</Label>
+                <Input
+                  value={getPreferredText(form.address_en, form.address_ku, form.address_ar, form.address)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    update("address", value);
+                    update("address_en", value);
+                    update("address_ku", value);
+                    update("address_ar", value);
                   }}
+                  placeholder="Enter address in any language"
                 />
               </div>
 
@@ -680,18 +703,27 @@ const ProjectForm = () => {
             </div>
           </FormSection>
 
-          <FormSection title="Description" description="Project description in multiple languages">
-            <MultilingualInput
-              label="Description"
-              multiline
-              values={{ en: form.description_en, ku: form.description_ku, ar: form.description_ar }}
-              onChange={(value) => {
-                update("description_en", value.en);
-                update("description_ku", value.ku);
-                update("description_ar", value.ar);
-                update("description", value.en);
-              }}
-            />
+          <FormSection title="Description" description="Project description in any language">
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={getPreferredText(
+                  form.description_en,
+                  form.description_ku,
+                  form.description_ar,
+                  form.description,
+                )}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  update("description", value);
+                  update("description_en", value);
+                  update("description_ku", value);
+                  update("description_ar", value);
+                }}
+                rows={4}
+                placeholder="Enter description in any language"
+              />
+            </div>
           </FormSection>
 
           <FormSection title="Contact Information" description="Agent contact details">
