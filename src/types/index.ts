@@ -43,6 +43,17 @@ export interface User {
   company_address?: string;
 }
 
+// Stories
+export interface Story {
+  id: string;
+  video_url: string;
+  created_by_uid: string;
+  created_by_name: string;
+  created_by_role: "admin" | "company";
+  created_at: string;
+  expires_at: string;
+}
+
 // Properties
 export interface Property {
   id: string;
