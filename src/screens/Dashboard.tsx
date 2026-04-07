@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Building2, Users, FolderKanban, ArrowUpRight, ArrowRight, Plus } from "lucide-react";
+import { Building2, Users, FolderKanban, ArrowUpRight, ArrowRight, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,14 @@ import type { AppVariableItem } from "@/modules/app-variables/types";
 import type { Client, Project, Property, Story } from "@/types";
 
 const MAX_STORY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024;
+
+type StoryGroup = {
+  created_by_uid: string;
+  created_by_name: string;
+  created_by_role: Story["created_by_role"];
+  latest_story: Story;
+  stories: Story[];
+};
 
 function parseIsoTime(value: string | null | undefined): number {
   if (!value) {
@@ -60,7 +68,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [uploadingStory, setUploadingStory] = useState(false);
   const [storyDialogOpen, setStoryDialogOpen] = useState(false);
-  const [activeStory, setActiveStory] = useState<Story | null>(null);
+  const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
+  const [activeStoryIndex, setActiveStoryIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [storyError, setStoryError] = useState<string | null>(null);
 
@@ -147,7 +156,48 @@ const Dashboard = () => {
     [stories],
   );
 
+  const storyGroups = useMemo(() => {
+    const grouped = new Map<string, StoryGroup>();
+
+    activeStories.forEach((story) => {
+      const key = story.created_by_uid || story.id;
+      const existing = grouped.get(key);
+
+      if (!existing) {
+        grouped.set(key, {
+          created_by_uid: story.created_by_uid,
+          created_by_name: story.created_by_name,
+          created_by_role: story.created_by_role,
+          latest_story: story,
+          stories: [story],
+        });
+        return;
+      }
+
+      existing.stories.push(story);
+
+      if (parseIsoTime(story.created_at) > parseIsoTime(existing.latest_story.created_at)) {
+        existing.latest_story = story;
+      }
+    });
+
+    return Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        stories: [...group.stories].sort(
+          (a, b) => parseIsoTime(a.created_at) - parseIsoTime(b.created_at),
+        ),
+      }))
+      .sort(
+        (a, b) => parseIsoTime(b.latest_story.created_at) - parseIsoTime(a.latest_story.created_at),
+      );
+  }, [activeStories]);
+
   const canPublishStory = !!user && (user.role === "admin" || user.role === "company");
+  const currentDialogStory = activeStoryGroup?.stories[activeStoryIndex] || null;
+  const canGoPreviousStory = activeStoryIndex > 0;
+  const canGoNextStory =
+    !!activeStoryGroup && activeStoryIndex < activeStoryGroup.stories.length - 1;
 
   const stats = [
     {
@@ -232,9 +282,24 @@ const Dashboard = () => {
     }
   }
 
-  function openStoryViewer(story: Story) {
-    setActiveStory(story);
+  function openStoryViewer(group: StoryGroup) {
+    setActiveStoryGroup(group);
+    setActiveStoryIndex(0);
     setStoryDialogOpen(true);
+  }
+
+  function goToPreviousStory() {
+    setActiveStoryIndex((current) => (current > 0 ? current - 1 : current));
+  }
+
+  function goToNextStory() {
+    setActiveStoryIndex((current) => {
+      if (!activeStoryGroup) {
+        return current;
+      }
+
+      return current < activeStoryGroup.stories.length - 1 ? current + 1 : current;
+    });
   }
 
   return (
@@ -268,33 +333,38 @@ const Dashboard = () => {
           />
         </CardHeader>
         <CardContent>
-          {activeStories.length === 0 ? (
+          {storyGroups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No active stories yet.</p>
           ) : (
             <div className="flex gap-4 overflow-x-auto pb-2">
-              {activeStories.map((story) => (
+              {storyGroups.map((group) => (
                 <button
-                  key={story.id}
+                  key={group.created_by_uid || group.latest_story.id}
                   type="button"
                   className="shrink-0 text-left"
-                  onClick={() => openStoryViewer(story)}
+                  onClick={() => openStoryViewer(group)}
                 >
                   <span className="relative block h-20 w-20 rounded-full bg-gradient-to-br from-primary/80 via-rose-400 to-amber-400 p-[2px]">
                     <span className="block h-full w-full overflow-hidden rounded-full bg-black">
                       <video
-                        src={story.video_url}
+                        src={group.latest_story.video_url}
                         className="h-full w-full object-cover"
                         muted
                         playsInline
                         preload="metadata"
                       />
                     </span>
+                    {group.stories.length > 1 ? (
+                      <span className="absolute bottom-0 right-0 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-background px-1 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                        {group.stories.length}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="mt-2 block max-w-[84px] truncate text-xs font-medium">
-                    {story.created_by_name}
+                    {group.created_by_name}
                   </span>
                   <span className="block text-[11px] text-muted-foreground">
-                    {formatStoryAge(story.created_at)}
+                    {formatStoryAge(group.latest_story.created_at)}
                   </span>
                 </button>
               ))}
@@ -413,32 +483,65 @@ const Dashboard = () => {
           setStoryDialogOpen(open);
 
           if (!open) {
-            setActiveStory(null);
+            setActiveStoryGroup(null);
+            setActiveStoryIndex(0);
           }
         }}
       >
         <DialogContent className="max-w-md overflow-hidden p-0">
-          {activeStory ? (
+          {currentDialogStory ? (
             <>
               <DialogTitle className="sr-only">Story video</DialogTitle>
               <DialogDescription className="sr-only">
-                Story from {activeStory.created_by_name}
+                Story from {currentDialogStory.created_by_name}
               </DialogDescription>
               <div className="bg-black">
                 <video
-                  key={activeStory.id}
-                  src={activeStory.video_url}
+                  key={currentDialogStory.id}
+                  src={currentDialogStory.video_url}
                   controls
                   autoPlay
                   playsInline
                   className="max-h-[70vh] w-full bg-black"
+                  onEnded={() => {
+                    if (canGoNextStory) {
+                      goToNextStory();
+                    }
+                  }}
                 />
               </div>
               <div className="px-4 pb-4">
-                <p className="text-sm font-semibold">{activeStory.created_by_name}</p>
+                <p className="text-sm font-semibold">{activeStoryGroup?.created_by_name}</p>
                 <p className="text-xs text-muted-foreground capitalize">
-                  {activeStory.created_by_role} · {formatStoryAge(activeStory.created_at)}
+                  {activeStoryGroup?.created_by_name} · {formatStoryAge(currentDialogStory.created_at)}
                 </p>
+                {activeStoryGroup && activeStoryGroup.stories.length > 1 ? (
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={goToPreviousStory}
+                      disabled={!canGoPreviousStory}
+                    >
+                      <ChevronLeft className="mr-1 h-4 w-4" />
+                      Previous
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      {activeStoryIndex + 1} / {activeStoryGroup.stories.length}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={goToNextStory}
+                      disabled={!canGoNextStory}
+                    >
+                      Next
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </>
           ) : null}
