@@ -272,11 +272,13 @@ const AppVariables = () => (
       <TabsList>
         <TabsTrigger value="types">Property Types</TabsTrigger>
         <TabsTrigger value="cities">Cities</TabsTrigger>
+        <TabsTrigger value="areas">Areas</TabsTrigger>
         <TabsTrigger value="amenities">Amenities</TabsTrigger>
         <TabsTrigger value="views">Views</TabsTrigger>
       </TabsList>
       <TabsContent value="types"><VariableTable title="Property Types" type="property_types" /></TabsContent>
       <TabsContent value="cities"><VariableTable title="Cities" type="cities" /></TabsContent>
+      <TabsContent value="areas"><VariableTable title="Areas" type="areas" /></TabsContent>
       <TabsContent value="amenities"><VariableTable title="Amenities" type="amenities" /></TabsContent>
       <TabsContent value="views"><VariableTable title="Views" type="views" /></TabsContent>
     </Tabs>

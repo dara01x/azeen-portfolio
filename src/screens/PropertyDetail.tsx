@@ -7,6 +7,7 @@ import {
   BedDouble,
   ChevronLeft,
   ChevronRight,
+  DoorOpen,
   Edit,
   ImageIcon,
   Layers3,
@@ -407,7 +408,7 @@ const PropertyDetail = () => {
           </Card>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
               <Ruler className="w-4 h-4 text-slate-600" />
@@ -421,6 +422,13 @@ const PropertyDetail = () => {
             </div>
             <p className="text-2xl font-bold text-slate-900">{property.bedrooms}</p>
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Bedrooms</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
+            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+              <DoorOpen className="w-4 h-4 text-slate-600" />
+            </div>
+            <p className="text-2xl font-bold text-slate-900">{property.suit_rooms}</p>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Suit Rooms</p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">

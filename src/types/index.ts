@@ -74,6 +74,7 @@ export interface Property {
   lng?: number;
   area_size: number;
   bedrooms: number;
+  suit_rooms: number;
   bathrooms: number;
   balconies: number;
   floors: number;

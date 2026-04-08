@@ -204,6 +204,7 @@ const ProjectForm = () => {
   const [error, setError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
+  const [areas, setAreas] = useState<AppVariableItem[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [amenities, setAmenities] = useState<AppVariableItem[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
@@ -225,6 +226,10 @@ const ProjectForm = () => {
 
     return null;
   }, [form.lat, form.lng]);
+  const areaNames = useMemo(
+    () => Array.from(new Set(areas.map((item) => item.name.trim()).filter(Boolean))),
+    [areas],
+  );
 
   useEffect(() => {
     if (authLoading) {
@@ -241,13 +246,19 @@ const ProjectForm = () => {
     setLookupsLoading(true);
     setLookupError(null);
 
-    Promise.all([getVariables("cities"), getVariables("property_types"), getVariables("amenities")])
-      .then(([cityItems, propertyTypeItems, amenityItems]) => {
+    Promise.all([
+      getVariables("cities"),
+      getVariables("areas"),
+      getVariables("property_types"),
+      getVariables("amenities"),
+    ])
+      .then(([cityItems, areaItems, propertyTypeItems, amenityItems]) => {
         if (cancelled) {
           return;
         }
 
         setCities(cityItems);
+        setAreas(areaItems);
         setPropertyTypes(propertyTypeItems);
         setAmenities(amenityItems);
       })
@@ -651,7 +662,24 @@ const ProjectForm = () => {
 
               <div className="space-y-2">
                 <Label>Area</Label>
-                <Input value={form.area} onChange={(e) => update("area", e.target.value)} />
+                <Select
+                  value={form.area || OPTIONAL_LINK_NONE}
+                  onValueChange={(value) => update("area", value === OPTIONAL_LINK_NONE ? "" : value)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select area (optional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={OPTIONAL_LINK_NONE}>None</SelectItem>
+                    {form.area.trim() && !areaNames.includes(form.area.trim()) ? (
+                      <SelectItem value={form.area}>Current: {form.area}</SelectItem>
+                    ) : null}
+                    {areaNames.map((areaName) => (
+                      <SelectItem key={areaName} value={areaName}>{areaName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {areaNames.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No areas configured. Add values in App Variables.</p>
+                ) : null}
               </div>
 
               <div className="sm:col-span-2 space-y-2">

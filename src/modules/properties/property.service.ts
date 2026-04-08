@@ -292,6 +292,7 @@ function normalizePropertyData(input: PropertyWriteInput) {
     coordinates,
     area_size: asNumber(input.area_size),
     bedrooms: asNumber(input.bedrooms),
+    suit_rooms: asNumber(input.suit_rooms),
     bathrooms: asNumber(input.bathrooms),
     balconies: asNumber(input.balconies),
     floors: asNumber(input.floors, 1),
@@ -322,10 +323,6 @@ function validateFloorConsistency(data: { total_floors: number | null; unit_floo
   const hasTotalFloors = typeof data.total_floors === "number" && Number.isFinite(data.total_floors);
   const hasUnitFloorNumber =
     typeof data.unit_floor_number === "number" && Number.isFinite(data.unit_floor_number);
-
-  if (hasUnitFloorNumber && !hasTotalFloors) {
-    throw new Error("Total floors is required when unit floor number is provided.");
-  }
 
   if (
     hasUnitFloorNumber &&
@@ -362,6 +359,7 @@ function mapDocToPropertyRecord(id: string, data: Record<string, unknown>): Prop
     lng: asOptionalNumber(coordinates.lng),
     area_size: asNumber(data.area_size),
     bedrooms: asNumber(data.bedrooms),
+    suit_rooms: asNumber(data.suit_rooms),
     bathrooms: asNumber(data.bathrooms),
     balconies: asNumber(data.balconies),
     floors: asNumber(data.floors, 1),

@@ -731,6 +731,7 @@ const PropertiesList = () => {
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span className="rounded-md border bg-muted/30 px-2 py-1 capitalize">{p.listing_type}</span>
                         <span>{p.bedrooms} bd</span>
+                        <span>{p.suit_rooms} sr</span>
                         <span className="capitalize">{p.condition.replaceAll("_", " ")}</span>
                       </div>
 

@@ -20,7 +20,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ImageUpload } from "@/components/ImageUpload";
 import { toast } from "@/components/ui/sonner";
@@ -31,12 +30,10 @@ import {
   updateProperty,
   uploadPropertyImageBlobUrls,
 } from "@/modules/properties/property.client";
-import { getClients as fetchClients } from "@/modules/clients/client.client";
 import { getUsers as fetchUsers } from "@/modules/users/user.client";
-import { getProjects } from "@/modules/projects/project.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
-import type { Amenity, City, Client, Project, Property, PropertyType, User, ViewType } from "@/types";
+import type { City, Property, PropertyType, User } from "@/types";
 
 const LocationPickerMap = dynamic(
   () => import("@/components/PropertyLocationMap").then((mod) => mod.PropertyLocationPickerMap),
@@ -65,6 +62,9 @@ const OWNERSHIP_TYPE_OPTIONS = [
 ] as const;
 
 const OPTIONAL_LINK_NONE = "__none__";
+
+const TOWER_NUMBER_TYPE_KEYWORDS = ["apartment", "department", "villa", "شقة", "فيلا"];
+const LAND_NUMBER_TYPE_KEYWORDS = ["house", "منزل", "بيت"];
 
 function parseOptionalNumber(value: string): number | undefined {
   const trimmed = value.trim();
@@ -182,7 +182,7 @@ const defaultProperty: Omit<Property, "id"> = {
   title: "", type_id: "", listing_type: "sale", status: "available",
   price: 0, currency: "USD", payment_type: "cash",
   city_id: "", area: "", address_en: "", address_ku: "", address_ar: "",
-  area_size: 0, bedrooms: 0, bathrooms: 0, balconies: 0, floors: 1, condition: "new",
+  area_size: 0, bedrooms: 0, suit_rooms: 0, bathrooms: 0, balconies: 0, floors: 1, condition: "new",
   ownership_type: "",
   amenities: [], description_en: "", description_ku: "", description_ar: "",
   images: [], contact_name: "", primary_mobile_number: "", internal_notes: "",
@@ -215,10 +215,7 @@ const PropertyForm = () => {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [propertyTypes, setPropertyTypes] = useState<PropertyType[]>([]);
   const [cities, setCities] = useState<City[]>([]);
-  const [amenities, setAmenities] = useState<Amenity[]>([]);
-  const [views, setViews] = useState<ViewType[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [areas, setAreas] = useState<City[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(prev => ({ ...prev, [key]: value }));
@@ -229,6 +226,26 @@ const PropertyForm = () => {
 
     return null;
   }, [form.lat, form.lng]);
+  const selectedTypeSearchText = useMemo(() => {
+    const selectedType = propertyTypes.find((item) => item.id === form.type_id);
+    if (!selectedType) {
+      return "";
+    }
+
+    return `${selectedType.id} ${selectedType.name}`.toLowerCase();
+  }, [form.type_id, propertyTypes]);
+  const showTowerNumber = useMemo(
+    () => TOWER_NUMBER_TYPE_KEYWORDS.some((keyword) => selectedTypeSearchText.includes(keyword)),
+    [selectedTypeSearchText],
+  );
+  const showLandNumber = useMemo(
+    () => LAND_NUMBER_TYPE_KEYWORDS.some((keyword) => selectedTypeSearchText.includes(keyword)),
+    [selectedTypeSearchText],
+  );
+  const areaNames = useMemo(
+    () => Array.from(new Set(areas.map((item) => item.name.trim()).filter(Boolean))),
+    [areas],
+  );
 
   useEffect(() => {
     if (authLoading || !user) {
@@ -242,18 +259,16 @@ const PropertyForm = () => {
     Promise.all([
       getVariables("property_types"),
       getVariables("cities"),
-      getVariables("amenities"),
-      getVariables("views"),
+      getVariables("areas"),
     ])
-      .then(([types, citiesList, amenitiesList, viewsList]) => {
+      .then(([types, citiesList, areasList]) => {
         if (cancelled) {
           return;
         }
 
         setPropertyTypes(types.map((item) => ({ id: item.id, name: item.name })));
         setCities(citiesList.map((item) => ({ id: item.id, name: item.name })));
-        setAmenities(amenitiesList.map((item) => ({ id: item.id, name: item.name })));
-        setViews(viewsList.map((item) => ({ id: item.id, name: item.name })));
+        setAreas(areasList.map((item) => ({ id: item.id, name: item.name })));
       })
       .catch((fetchError) => {
         if (!cancelled) {
@@ -292,58 +307,6 @@ const PropertyForm = () => {
           const message = fetchError instanceof Error ? fetchError.message : "Failed to load users.";
           setLookupError((prev) => prev || message);
           setCompanies([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, user]);
-
-  useEffect(() => {
-    if (authLoading || !user) {
-      return;
-    }
-
-    let cancelled = false;
-
-    fetchClients()
-      .then((items) => {
-        if (!cancelled) {
-          setClients(items as Client[]);
-        }
-      })
-      .catch((fetchError) => {
-        if (!cancelled) {
-          const message = fetchError instanceof Error ? fetchError.message : "Failed to load clients.";
-          setLookupError((prev) => prev || message);
-          setClients([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, user]);
-
-  useEffect(() => {
-    if (authLoading || !user) {
-      return;
-    }
-
-    let cancelled = false;
-
-    getProjects()
-      .then((items) => {
-        if (!cancelled) {
-          setProjects(items as Project[]);
-        }
-      })
-      .catch((fetchError) => {
-        if (!cancelled) {
-          const message = fetchError instanceof Error ? fetchError.message : "Failed to load projects.";
-          setLookupError((prev) => prev || message);
-          setProjects([]);
         }
       });
 
@@ -444,56 +407,56 @@ const PropertyForm = () => {
 
     try {
       const normalizedPrimaryMobileNumber = normalizePhoneNumber(form.primary_mobile_number);
-      const normalizedSecondaryMobileNumber = normalizePhoneNumber(form.secondary_mobile_number || "");
       const singleAddressValue = getPreferredText(
         form.address_en,
         form.address_ku,
         form.address_ar,
       ).trim();
-      const singleDescriptionValue = getPreferredText(
-        form.description_en,
-        form.description_ku,
-        form.description_ar,
-      ).trim();
 
       const payload: Omit<Property, "id"> = {
         ...form,
+        currency: form.currency || "USD",
         title: form.title.trim() || buildInternalPropertyTitle(form, propertyTypes, cities),
         address_en: singleAddressValue,
         address_ku: singleAddressValue,
         address_ar: singleAddressValue,
-        description_en: singleDescriptionValue,
-        description_ku: singleDescriptionValue,
-        description_ar: singleDescriptionValue,
         contact_name: form.contact_name.trim(),
         primary_mobile_number: normalizedPrimaryMobileNumber,
-        secondary_mobile_number: normalizedSecondaryMobileNumber || undefined,
+        internal_notes: (form.internal_notes || "").trim(),
       };
 
       if (!payload.type_id) {
         throw new Error("Property type is required.");
       }
 
-      if (!payload.city_id) {
-        throw new Error("City is required.");
+      if (payload.price <= 0) {
+        throw new Error("Price is required.");
+      }
+
+      if (!payload.area.trim()) {
+        throw new Error("Area is required.");
+      }
+
+      if (payload.area_size <= 0) {
+        throw new Error("Area size is required.");
+      }
+
+      if (!payload.internal_notes) {
+        throw new Error("Internal notes are required.");
       }
 
       if (payload.primary_mobile_number && !isValidPhoneNumber(payload.primary_mobile_number)) {
         throw new Error("Primary mobile number is invalid.");
       }
 
-      if (payload.secondary_mobile_number && !isValidPhoneNumber(payload.secondary_mobile_number)) {
-        throw new Error("Secondary mobile number is invalid.");
-      }
-
       if (
         hasNegativeNumber(payload.price) ||
         hasNegativeNumber(payload.area_size) ||
         hasNegativeNumber(payload.bedrooms) ||
+        hasNegativeNumber(payload.suit_rooms) ||
         hasNegativeNumber(payload.bathrooms) ||
         hasNegativeNumber(payload.balconies) ||
         hasNegativeNumber(payload.floors) ||
-        hasNegativeNumber(payload.total_floors) ||
         hasNegativeNumber(payload.unit_floor_number)
       ) {
         throw new Error("Numeric fields cannot be negative.");
@@ -501,23 +464,6 @@ const PropertyForm = () => {
 
       if (!isValidCoordinates(payload.lat, payload.lng)) {
         throw new Error("Coordinates must be empty or include valid latitude and longitude.");
-      }
-
-      const hasTotalFloors =
-        typeof payload.total_floors === "number" && Number.isFinite(payload.total_floors);
-      const hasUnitFloorNumber =
-        typeof payload.unit_floor_number === "number" && Number.isFinite(payload.unit_floor_number);
-
-      if (hasUnitFloorNumber && !hasTotalFloors) {
-        throw new Error("Total floors is required when unit floor number is provided.");
-      }
-
-      if (
-        hasUnitFloorNumber &&
-        hasTotalFloors &&
-        (payload.unit_floor_number as number) > (payload.total_floors as number)
-      ) {
-        throw new Error("Unit floor number cannot be greater than total floors.");
       }
 
       const activeLocalFiles = Object.fromEntries(
@@ -655,22 +601,10 @@ const PropertyForm = () => {
                 <SelectContent>{propertyTypes.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Listing Type *</Label>
+            <div className="space-y-2"><Label>Listing Type (Optional)</Label>
               <Select value={form.listing_type} onValueChange={v => update("listing_type", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="sale">Sale</SelectItem><SelectItem value="rent">Rent</SelectItem></SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2"><Label>Status *</Label>
-              <Select value={form.status} onValueChange={v => update("status", v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="available">Available</SelectItem><SelectItem value="sold">Sold</SelectItem><SelectItem value="archived">Archived</SelectItem></SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2"><Label>Condition *</Label>
-              <Select value={form.condition} onValueChange={v => update("condition", v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="new">New</SelectItem><SelectItem value="used">Used</SelectItem><SelectItem value="under_construction">Under Construction</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label>Ownership Type (Optional)</Label>
@@ -689,13 +623,13 @@ const PropertyForm = () => {
         <FormSection title="Pricing" description="Set the price and payment terms">
           <div className="grid gap-5 sm:grid-cols-3">
             <div className="space-y-2"><Label>Price *</Label><Input type="text" inputMode="numeric" value={formatPriceInput(form.price)} onChange={e => update("price", parsePriceInput(e.target.value))} placeholder="0" /></div>
-            <div className="space-y-2"><Label>Currency *</Label>
+            <div className="space-y-2"><Label>Currency (Optional)</Label>
               <Select value={form.currency} onValueChange={v => update("currency", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="USD">USD</SelectItem><SelectItem value="IQD">IQD</SelectItem></SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Payment Type *</Label>
+            <div className="space-y-2"><Label>Payment Type (Optional)</Label>
               <Select value={form.payment_type} onValueChange={v => update("payment_type", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="installment">Installment</SelectItem></SelectContent>
@@ -706,15 +640,31 @@ const PropertyForm = () => {
 
         <FormSection title="Location" description="Where is this property located?">
           <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2"><Label>City *</Label>
+            <div className="space-y-2"><Label>City (Optional)</Label>
               <Select value={form.city_id} onValueChange={v => update("city_id", v)}>
                 <SelectTrigger><SelectValue placeholder="Select city" /></SelectTrigger>
                 <SelectContent>{cities.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Area (Optional)</Label><Input value={form.area} onChange={e => update("area", e.target.value)} placeholder="e.g. Downtown" /></div>
+            <div className="space-y-2">
+              <Label>Area *</Label>
+              <Select value={form.area} onValueChange={(value) => update("area", value)}>
+                <SelectTrigger><SelectValue placeholder="Select area" /></SelectTrigger>
+                <SelectContent>
+                  {form.area.trim() && !areaNames.includes(form.area.trim()) ? (
+                    <SelectItem value={form.area}>Current: {form.area}</SelectItem>
+                  ) : null}
+                  {areaNames.map((areaName) => (
+                    <SelectItem key={areaName} value={areaName}>{areaName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {areaNames.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No areas configured. Add values in App Variables.</p>
+              ) : null}
+            </div>
             <div className="sm:col-span-2 space-y-2">
-              <Label>Address (Optional)</Label>
+              <Label>Plot Number (Optional)</Label>
               <Input
                 value={getPreferredText(form.address_en, form.address_ku, form.address_ar)}
                 onChange={(e) => {
@@ -723,7 +673,7 @@ const PropertyForm = () => {
                   update("address_ku", value);
                   update("address_ar", value);
                 }}
-                placeholder="Enter address in any language"
+                placeholder="Enter plot number"
               />
             </div>
             <Separator className="sm:col-span-2" />
@@ -749,64 +699,22 @@ const PropertyForm = () => {
           <div className="grid gap-5 sm:grid-cols-4">
             <div className="space-y-2"><Label>Area Size (m²) *</Label><Input type="number" min={0} value={form.area_size || ""} onChange={e => update("area_size", Math.max(0, Number(e.target.value) || 0))} /></div>
             <div className="space-y-2"><Label>Bedrooms (Optional)</Label><Input type="number" min={0} value={form.bedrooms || ""} onChange={e => update("bedrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
+            <div className="space-y-2"><Label>Suit Rooms (Optional)</Label><Input type="number" min={0} value={form.suit_rooms || ""} onChange={e => update("suit_rooms", Math.max(0, Number(e.target.value) || 0))} /></div>
             <div className="space-y-2"><Label>Bathrooms (Optional)</Label><Input type="number" min={0} value={form.bathrooms || ""} onChange={e => update("bathrooms", Math.max(0, Number(e.target.value) || 0))} /></div>
             <div className="space-y-2"><Label>Balconies (Optional)</Label><Input type="number" min={0} value={form.balconies || ""} onChange={e => update("balconies", Math.max(0, Number(e.target.value) || 0))} /></div>
             <div className="space-y-2"><Label>Property Floors (Optional)</Label><Input type="number" min={0} value={form.floors || ""} onChange={e => update("floors", Math.max(0, Number(e.target.value) || 0))} /></div>
           </div>
         </FormSection>
 
-        <FormSection title="Features & Amenities" description="What does this property offer?">
-          <div className="space-y-5">
-            <div className="space-y-2"><Label>View (Optional)</Label>
-              <Select value={form.view_id || ""} onValueChange={v => update("view_id", v)}>
-                <SelectTrigger className="sm:w-1/2"><SelectValue placeholder="Select view (optional)" /></SelectTrigger>
-                <SelectContent>{views.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <Separator />
-            <div>
-              <Label className="mb-3 block">Amenities (Optional)</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {amenities.map(a => (
-                  <label key={a.id} className="flex items-center gap-2.5 text-sm rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary/30 has-[:checked]:bg-primary/5">
-                    <Checkbox checked={form.amenities.includes(a.id)} onCheckedChange={(c) => {
-                      update("amenities", c ? [...form.amenities, a.id] : form.amenities.filter(id => id !== a.id));
-                    }} />
-                    {a.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        </FormSection>
-
         <FormSection title="Building Info" description="Building-specific details (optional)">
-          <p className="mb-4 text-xs text-muted-foreground">
-            For apartments: use Total Floors and Unit Floor Number. For standalone properties: use Property Floors.
-          </p>
           <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2"><Label>Building Name (Optional)</Label><Input value={form.building_name || ""} onChange={e => update("building_name", e.target.value)} /></div>
-            <div className="space-y-2"><Label>Tower Number (Optional)</Label><Input value={form.tower_number || ""} onChange={e => update("tower_number", e.target.value)} /></div>
-            <div className="space-y-2"><Label>Land Number (Optional)</Label><Input value={form.land_number || ""} onChange={e => update("land_number", e.target.value)} /></div>
-            <div className="space-y-2"><Label>Total Floors (Optional)</Label><Input type="number" min={0} value={form.total_floors ?? ""} onChange={e => update("total_floors", parseOptionalNumber(e.target.value))} /></div>
+            {showTowerNumber ? (
+              <div className="space-y-2"><Label>Tower Number (Optional)</Label><Input value={form.tower_number || ""} onChange={e => update("tower_number", e.target.value)} /></div>
+            ) : null}
+            {showLandNumber ? (
+              <div className="space-y-2"><Label>Land Number (Optional)</Label><Input value={form.land_number || ""} onChange={e => update("land_number", e.target.value)} /></div>
+            ) : null}
             <div className="space-y-2"><Label>Unit Floor Number (Optional)</Label><Input type="number" min={0} value={form.unit_floor_number ?? ""} onChange={e => update("unit_floor_number", parseOptionalNumber(e.target.value))} /></div>
-          </div>
-        </FormSection>
-
-        <FormSection title="Description" description="Property description in any language">
-          <div className="space-y-2">
-            <Label>Description (Optional)</Label>
-            <Textarea
-              value={getPreferredText(form.description_en, form.description_ku, form.description_ar)}
-              onChange={(e) => {
-                const value = e.target.value;
-                update("description_en", value);
-                update("description_ku", value);
-                update("description_ar", value);
-              }}
-              rows={4}
-              placeholder="Enter description in any language"
-            />
           </div>
         </FormSection>
 
@@ -853,50 +761,8 @@ const PropertyForm = () => {
           </div>
         </FormSection>
 
-        <FormSection title="Relations" description="Link this property with related records by their document IDs">
-          <div className="grid gap-5 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Project (Optional)</Label>
-              <Select
-                value={form.project_id || OPTIONAL_LINK_NONE}
-                onValueChange={(value) => update("project_id", value === OPTIONAL_LINK_NONE ? undefined : value)}
-              >
-                <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={OPTIONAL_LINK_NONE}>None</SelectItem>
-                  {!hasOptionById(projects, form.project_id) && form.project_id ? (
-                    <SelectItem value={form.project_id}>Current: {form.project_id}</SelectItem>
-                  ) : null}
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>{project.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Owner Client (Optional)</Label>
-              <Select
-                value={form.owner_client_id || OPTIONAL_LINK_NONE}
-                onValueChange={(value) =>
-                  update("owner_client_id", value === OPTIONAL_LINK_NONE ? undefined : value)
-                }
-              >
-                <SelectTrigger><SelectValue placeholder="Select owner client" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={OPTIONAL_LINK_NONE}>None</SelectItem>
-                  {!hasOptionById(clients, form.owner_client_id) && form.owner_client_id ? (
-                    <SelectItem value={form.owner_client_id}>Current: {form.owner_client_id}</SelectItem>
-                  ) : null}
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.full_name} - {client.primary_phone}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
+        <FormSection title="Assignment" description="Assign this property to a company (optional)">
+          <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Assigned Company (Optional)</Label>
               <Select
@@ -926,12 +792,14 @@ const PropertyForm = () => {
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2"><Label>Contact Name (Optional)</Label><Input value={form.contact_name} onChange={e => update("contact_name", e.target.value)} placeholder="Enter contact person name" /></div>
             <div className="space-y-2"><Label>Primary Mobile Number (Optional)</Label><Input value={form.primary_mobile_number} onChange={e => update("primary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
-            <div className="space-y-2 sm:col-span-2"><Label>Secondary Mobile Number (Optional)</Label><Input value={form.secondary_mobile_number || ""} onChange={e => update("secondary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
           </div>
         </FormSection>
 
         <FormSection title="Internal Notes" description="Private notes not visible to clients">
-          <Textarea value={form.internal_notes || ""} onChange={e => update("internal_notes", e.target.value)} placeholder="Add any internal notes here..." rows={4} />
+          <div className="space-y-2">
+            <Label>Notes *</Label>
+            <Textarea value={form.internal_notes || ""} onChange={e => update("internal_notes", e.target.value)} placeholder="Add any internal notes here..." rows={4} />
+          </div>
         </FormSection>
 
         <div className="flex justify-end gap-3 pb-8">
