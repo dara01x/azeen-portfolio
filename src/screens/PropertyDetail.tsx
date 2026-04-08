@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { getPropertyById } from "@/modules/properties/property.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
@@ -99,11 +98,8 @@ const PropertyDetail = () => {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
-  const [activeDescriptionLang, setActiveDescriptionLang] = useState<"en" | "ku" | "ar">("en");
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
-  const [amenities, setAmenities] = useState<AppVariableItem[]>([]);
-  const [views, setViews] = useState<AppVariableItem[]>([]);
 
   useEffect(() => {
     if (authLoading || !user || !id) {
@@ -149,18 +145,14 @@ const PropertyDetail = () => {
     Promise.all([
       getVariables("property_types"),
       getVariables("cities"),
-      getVariables("amenities"),
-      getVariables("views"),
     ])
-      .then(([types, citiesList, amenitiesList, viewsList]) => {
+      .then(([types, citiesList]) => {
         if (cancelled) {
           return;
         }
 
         setPropertyTypes(types);
         setCities(citiesList);
-        setAmenities(amenitiesList);
-        setViews(viewsList);
       })
       .catch((fetchError) => {
         if (!cancelled) {
@@ -210,11 +202,7 @@ const PropertyDetail = () => {
 
   const typeName = findVariableName(propertyTypes, property.type_id);
   const cityName = findVariableName(cities, property.city_id);
-  const viewName = findVariableName(views, property.view_id);
-  const amenityNames = property.amenities.map((amenityId) => findVariableName(amenities, amenityId));
   const listingTypeLabel = property.listing_type === "sale" ? "For Sale" : "For Rent";
-  const conditionLabel = formatEnumLabel(property.condition);
-  const statusLabel = formatEnumLabel(property.status);
   const paymentTypeLabel = formatEnumLabel(property.payment_type);
   const ownershipTypeLabel = formatEnumLabel(property.ownership_type);
   const images = property.images.length > 0 ? property.images : property.main_image ? [property.main_image] : [];
@@ -228,19 +216,6 @@ const PropertyDetail = () => {
     typeof property.lat === "number" && Number.isFinite(property.lat) && typeof property.lng === "number" && Number.isFinite(property.lng)
       ? { lat: property.lat, lng: property.lng }
       : null;
-
-  const relationRows = [
-    { label: "Project", value: property.project_id || "—" },
-    { label: "Owner Client", value: property.owner_client_id || "—" },
-    { label: "Assigned Company", value: property.assigned_company_id || "—" },
-  ];
-
-  const activeDescription =
-    activeDescriptionLang === "en"
-      ? property.description_en
-      : activeDescriptionLang === "ku"
-        ? property.description_ku
-        : property.description_ar;
 
   const showImageControls = images.length > 1;
 
@@ -273,7 +248,6 @@ const PropertyDetail = () => {
 
           <div className="flex-1 min-w-0 flex items-center justify-center gap-2">
             <p className="font-semibold text-slate-800 truncate">{typeName} · {listingTypeLabel}</p>
-            <StatusBadge status={property.status} />
           </div>
 
           <Button asChild className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium">
@@ -379,8 +353,8 @@ const PropertyDetail = () => {
                 <p className="text-sm font-semibold text-slate-700">{typeName}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400 uppercase">Condition</p>
-                <p className="text-sm font-semibold text-slate-700">{conditionLabel}</p>
+                <p className="text-xs text-slate-400 uppercase">Listing Type</p>
+                <p className="text-sm font-semibold text-slate-700">{listingTypeLabel}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-400 uppercase">Ownership Type</p>
@@ -397,9 +371,6 @@ const PropertyDetail = () => {
               </div>
               <p className="font-semibold text-slate-800">{property.contact_name || "—"}</p>
               <p className="text-sm text-slate-500">{property.primary_mobile_number || "—"}</p>
-              {property.secondary_mobile_number ? (
-                <p className="text-sm text-slate-500">{property.secondary_mobile_number}</p>
-              ) : null}
             </div>
 
             <Button asChild className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
@@ -467,68 +438,6 @@ const PropertyDetail = () => {
                     {coordinates.lat.toFixed(5)}, {coordinates.lng.toFixed(5)}
                   </p>
                 ) : null}
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="bg-slate-50 rounded-xl p-4 space-y-1">
-                    <p className="text-[10px] uppercase tracking-widest text-slate-400">Address (EN)</p>
-                    <p className="text-sm text-slate-700">{property.address_en || "—"}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl p-4 space-y-1">
-                    <p className="text-[10px] uppercase tracking-widest text-slate-400">Address (KU)</p>
-                    <p className="text-sm text-slate-700">{property.address_ku || "—"}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl p-4 space-y-1">
-                    <p className="text-[10px] uppercase tracking-widest text-slate-400">Address (AR)</p>
-                    <p className="text-sm text-slate-700">{property.address_ar || "—"}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Description</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1">
-                  <button
-                    type="button"
-                    className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
-                      activeDescriptionLang === "en"
-                        ? "bg-slate-800 text-white"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                    onClick={() => setActiveDescriptionLang("en")}
-                  >
-                    EN
-                  </button>
-                  <button
-                    type="button"
-                    className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
-                      activeDescriptionLang === "ku"
-                        ? "bg-slate-800 text-white"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                    onClick={() => setActiveDescriptionLang("ku")}
-                  >
-                    KU
-                  </button>
-                  <button
-                    type="button"
-                    className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
-                      activeDescriptionLang === "ar"
-                        ? "bg-slate-800 text-white"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                    onClick={() => setActiveDescriptionLang("ar")}
-                  >
-                    AR
-                  </button>
-                </div>
-
-                <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-700 whitespace-pre-wrap min-h-[80px]">
-                  {activeDescription || "—"}
-                </div>
               </CardContent>
             </Card>
 
@@ -556,34 +465,7 @@ const PropertyDetail = () => {
                   <Field label="Property ID" value={propertyCode} />
                   <Field label="Type" value={typeName} />
                   <Field label="Listing Type" value={listingTypeLabel} />
-                  <Field label="Status" value={statusLabel} />
-                  <Field label="Condition" value={conditionLabel} />
                   <Field label="Ownership Type" value={ownershipTypeLabel} />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <CardContent className="p-5 space-y-4">
-                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3">Features & Amenities</p>
-                <Field label="View" value={viewName} />
-                <Separator />
-                <div>
-                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Amenities</p>
-                  {amenityNames.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {amenityNames.map((amenityName) => (
-                        <span
-                          key={amenityName}
-                          className="bg-slate-100 text-slate-700 rounded-lg px-3 py-1 text-xs font-medium"
-                        >
-                          {amenityName}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-slate-400 text-sm">No amenities selected.</p>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -593,9 +475,7 @@ const PropertyDetail = () => {
                 <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Building Info</p>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Land Number" value={property.land_number} />
-                  <Field label="Total Floors" value={property.total_floors} />
                   <Field label="Unit Floor Number" value={property.unit_floor_number} />
-                  <Field label="Building Name" value={property.building_name} />
                   <Field label="Tower Number" value={property.tower_number} />
                 </div>
               </CardContent>
@@ -607,7 +487,6 @@ const PropertyDetail = () => {
                 <div className="grid grid-cols-1 gap-4">
                   <Field label="Contact Name" value={property.contact_name} />
                   <Field label="Primary Mobile Number" value={property.primary_mobile_number} />
-                  <Field label="Secondary Mobile Number" value={property.secondary_mobile_number} />
                 </div>
               </CardContent>
             </Card>
@@ -647,16 +526,9 @@ const PropertyDetail = () => {
 
             <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
               <CardContent className="p-5">
-                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-2">Relations</p>
-                <div>
-                  {relationRows.map((row) => (
-                    <div key={row.label} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-                      <span className="text-xs text-slate-400 uppercase">{row.label}</span>
-                      <span className={`text-sm font-medium font-mono ${row.value === "—" ? "text-slate-300" : "text-slate-700"}`}>
-                        {row.value}
-                      </span>
-                    </div>
-                  ))}
+                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Assignment</p>
+                <div className="grid grid-cols-1 gap-4">
+                  <Field label="Assigned Company" value={property.assigned_company_id} />
                 </div>
               </CardContent>
             </Card>
