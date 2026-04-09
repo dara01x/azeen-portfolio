@@ -22,8 +22,9 @@ import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/EmptyState";
 import { getPropertyById } from "@/modules/properties/property.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
+import { getUsers as fetchUsers } from "@/modules/users/user.client";
 import { useAuth } from "@/lib/auth/useAuth";
-import type { Property } from "@/types";
+import type { Property, User } from "@/types";
 import type { AppVariableItem } from "@/modules/app-variables/types";
 
 function GoogleMapPreview({
@@ -87,6 +88,10 @@ function formatEnumLabel(value?: string | null) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function formatOptionalMetric(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : "—";
+}
+
 const PropertyDetail = () => {
   const params = useParams<{ id: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -100,6 +105,7 @@ const PropertyDetail = () => {
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
+  const [companies, setCompanies] = useState<User[]>([]);
 
   useEffect(() => {
     if (authLoading || !user || !id) {
@@ -167,6 +173,32 @@ const PropertyDetail = () => {
   }, [authLoading, user]);
 
   useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchUsers()
+      .then((items) => {
+        if (!cancelled) {
+          setCompanies((items as User[]).filter((item) => item.role === "company"));
+        }
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          const message = fetchError instanceof Error ? fetchError.message : "Failed to load companies.";
+          setLookupError((prev) => prev || message);
+          setCompanies([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  useEffect(() => {
     if (!property) {
       setActiveImageIndex(0);
       return;
@@ -205,6 +237,18 @@ const PropertyDetail = () => {
   const listingTypeLabel = property.listing_type === "sale" ? "For Sale" : "For Rent";
   const paymentTypeLabel = formatEnumLabel(property.payment_type);
   const ownershipTypeLabel = formatEnumLabel(property.ownership_type);
+  const assignedCompanyName = (() => {
+    if (!property.assigned_company_id) {
+      return "—";
+    }
+
+    const assignedCompany = companies.find((item) => item.id === property.assigned_company_id);
+    if (!assignedCompany) {
+      return "—";
+    }
+
+    return assignedCompany.company_name || assignedCompany.full_name || "—";
+  })();
   const images = property.images.length > 0 ? property.images : property.main_image ? [property.main_image] : [];
   const safeImageIndex = images.length > 0 && activeImageIndex < images.length ? activeImageIndex : 0;
   const activeImage = images.length > 0 ? images[safeImageIndex] : undefined;
@@ -391,35 +435,35 @@ const PropertyDetail = () => {
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
               <BedDouble className="w-4 h-4 text-slate-600" />
             </div>
-            <p className="text-2xl font-bold text-slate-900">{property.bedrooms}</p>
+            <p className="text-2xl font-bold text-slate-900">{formatOptionalMetric(property.bedrooms)}</p>
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Bedrooms</p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
               <DoorOpen className="w-4 h-4 text-slate-600" />
             </div>
-            <p className="text-2xl font-bold text-slate-900">{property.suit_rooms}</p>
+            <p className="text-2xl font-bold text-slate-900">{formatOptionalMetric(property.suit_rooms)}</p>
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Suit Rooms</p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
               <Bath className="w-4 h-4 text-slate-600" />
             </div>
-            <p className="text-2xl font-bold text-slate-900">{property.bathrooms}</p>
+            <p className="text-2xl font-bold text-slate-900">{formatOptionalMetric(property.bathrooms)}</p>
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Bathrooms</p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
               <Layers3 className="w-4 h-4 text-slate-600" />
             </div>
-            <p className="text-2xl font-bold text-slate-900">{property.floors}</p>
+            <p className="text-2xl font-bold text-slate-900">{formatOptionalMetric(property.floors)}</p>
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Floors</p>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col items-start gap-2">
             <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
               <Layers3 className="w-4 h-4 text-slate-600" />
             </div>
-            <p className="text-2xl font-bold text-slate-900">{property.balconies}</p>
+            <p className="text-2xl font-bold text-slate-900">{formatOptionalMetric(property.balconies)}</p>
             <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Balconies</p>
           </div>
         </div>
@@ -528,7 +572,7 @@ const PropertyDetail = () => {
               <CardContent className="p-5">
                 <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Assignment</p>
                 <div className="grid grid-cols-1 gap-4">
-                  <Field label="Assigned Company" value={property.assigned_company_id} />
+                  <Field label="Assigned Company" value={assignedCompanyName} />
                 </div>
               </CardContent>
             </Card>

@@ -69,13 +69,10 @@ const PropertiesList = () => {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
+  const [areas, setAreas] = useState<AppVariableItem[]>([]);
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [listingTypeFilter, setListingTypeFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [conditionFilter, setConditionFilter] = useState("all");
-  const [minBedroomsFilter, setMinBedroomsFilter] = useState("any");
+  const [areaFilter, setAreaFilter] = useState("all");
   const [minPriceFilter, setMinPriceFilter] = useState("");
   const [maxPriceFilter, setMaxPriceFilter] = useState("");
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
@@ -94,21 +91,13 @@ const PropertiesList = () => {
 
   const hasActiveFilters =
     cityFilter !== "all" ||
-    typeFilter !== "all" ||
-    listingTypeFilter !== "all" ||
-    statusFilter !== "all" ||
-    conditionFilter !== "all" ||
-    minBedroomsFilter !== "any" ||
+    areaFilter !== "all" ||
     minPriceFilter.trim() !== "" ||
     maxPriceFilter.trim() !== "";
 
   const resetFilters = () => {
     setCityFilter("all");
-    setTypeFilter("all");
-    setListingTypeFilter("all");
-    setStatusFilter("all");
-    setConditionFilter("all");
-    setMinBedroomsFilter("any");
+    setAreaFilter("all");
     setMinPriceFilter("");
     setMaxPriceFilter("");
   };
@@ -154,14 +143,15 @@ const PropertiesList = () => {
     let cancelled = false;
     setLookupError(null);
 
-    Promise.all([getVariables("property_types"), getVariables("cities")])
-      .then(([types, citiesList]) => {
+    Promise.all([getVariables("property_types"), getVariables("cities"), getVariables("areas")])
+      .then(([types, citiesList, areasList]) => {
         if (cancelled) {
           return;
         }
 
         setPropertyTypes(types);
         setCities(citiesList);
+        setAreas(areasList);
       })
       .catch((fetchError) => {
         if (!cancelled) {
@@ -208,17 +198,7 @@ const PropertiesList = () => {
     }
 
     if (cityFilter !== "all" && p.city_id !== cityFilter) return false;
-    if (typeFilter !== "all" && p.type_id !== typeFilter) return false;
-    if (listingTypeFilter !== "all" && p.listing_type !== listingTypeFilter) return false;
-    if (statusFilter !== "all" && p.status !== statusFilter) return false;
-    if (conditionFilter !== "all" && p.condition !== conditionFilter) return false;
-
-    if (minBedroomsFilter !== "any") {
-      const minBedrooms = Number(minBedroomsFilter);
-      if (Number.isFinite(minBedrooms) && p.bedrooms < minBedrooms) {
-        return false;
-      }
-    }
+    if (areaFilter !== "all" && p.area !== areaFilter) return false;
 
     const minPrice = parseFilterNumber(minPriceFilter);
     if (minPrice != null && p.price < minPrice) {
@@ -238,11 +218,7 @@ const PropertiesList = () => {
   }, [
     search,
     cityFilter,
-    typeFilter,
-    listingTypeFilter,
-    statusFilter,
-    conditionFilter,
-    minBedroomsFilter,
+    areaFilter,
     minPriceFilter,
     maxPriceFilter,
   ]);
@@ -541,65 +517,12 @@ const PropertiesList = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Property Type</p>
-                  <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Property Type" /></SelectTrigger>
+                  <p className="text-xs font-medium text-muted-foreground">Area</p>
+                  <Select value={areaFilter} onValueChange={setAreaFilter}>
+                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Area" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Property Types</SelectItem>
-                      {propertyTypes.map((type) => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Listing Type</p>
-                  <Select value={listingTypeFilter} onValueChange={setListingTypeFilter}>
-                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Listing Type" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Listing Types</SelectItem>
-                      <SelectItem value="sale">Sale</SelectItem>
-                      <SelectItem value="rent">Rent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Status</p>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Status" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="available">Available</SelectItem>
-                      <SelectItem value="sold">Sold</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Condition</p>
-                  <Select value={conditionFilter} onValueChange={setConditionFilter}>
-                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Condition" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Conditions</SelectItem>
-                      <SelectItem value="new">New</SelectItem>
-                      <SelectItem value="used">Used</SelectItem>
-                      <SelectItem value="under_construction">Under Construction</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Min Bedrooms</p>
-                  <Select value={minBedroomsFilter} onValueChange={setMinBedroomsFilter}>
-                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Min Bedrooms" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="any">Any Bedrooms</SelectItem>
-                      <SelectItem value="1">1+</SelectItem>
-                      <SelectItem value="2">2+</SelectItem>
-                      <SelectItem value="3">3+</SelectItem>
-                      <SelectItem value="4">4+</SelectItem>
-                      <SelectItem value="5">5+</SelectItem>
+                      <SelectItem value="all">All Areas</SelectItem>
+                      {areas.map((area) => <SelectItem key={area.id} value={area.name}>{area.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

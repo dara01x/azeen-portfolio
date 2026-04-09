@@ -24,10 +24,15 @@ const systemNav = [
 ];
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const { user } = useAuth();
   const collapsed = state === "collapsed";
   const visibleMainNav = user?.role === "company" ? mainNav.filter((item) => item.url !== "/users") : mainNav;
+  const handleNavItemClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -52,7 +57,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {visibleMainNav.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
+                  <SidebarMenuButton asChild onClick={handleNavItemClick}>
                     <NavLink
                       to={item.url}
                       end={item.url === "/"}
@@ -74,7 +79,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {systemNav.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
+                  <SidebarMenuButton asChild onClick={handleNavItemClick}>
                     <NavLink
                       to={item.url}
                       className="rounded-lg mx-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
