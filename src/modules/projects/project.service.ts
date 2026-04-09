@@ -17,8 +17,50 @@ type ProjectWriteInput = Partial<Project> & {
   coordinates?: Partial<ProjectCoordinates>;
 };
 
+type ProjectAccessScope = {
+  role: "admin" | "company";
+  userId: string;
+};
+
 function asString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
+}
+
+function isCompanyScope(
+  scope?: ProjectAccessScope,
+): scope is ProjectAccessScope & { role: "company" } {
+  return !!scope && scope.role === "company";
+}
+
+function redactProjectContactFields(record: ProjectRecord): ProjectRecord {
+  return {
+    ...record,
+    contact_name: "",
+    primary_mobile_number: "",
+    secondary_mobile_number: undefined,
+  };
+}
+
+function applyProjectReadScope(record: ProjectRecord, scope?: ProjectAccessScope): ProjectRecord {
+  if (!isCompanyScope(scope)) {
+    return record;
+  }
+
+  return redactProjectContactFields(record);
+}
+
+function assertCompanyProjectWriteAccess(
+  existingData: Record<string, unknown>,
+  scope?: ProjectAccessScope,
+) {
+  if (!isCompanyScope(scope)) {
+    return;
+  }
+
+  const assignedCompanyId = asString(existingData.assigned_company_id).trim();
+  if (!assignedCompanyId || assignedCompanyId !== scope.userId) {
+    throw new Error("Forbidden.");
+  }
 }
 
 function asNumber(value: unknown, fallback = 0) {
@@ -275,10 +317,17 @@ function mapDocToProjectRecord(id: string, data: Record<string, unknown>): Proje
   };
 }
 
-export async function createProject(data: ProjectWriteInput): Promise<ProjectRecord> {
+export async function createProject(
+  data: ProjectWriteInput,
+  scope?: ProjectAccessScope,
+): Promise<ProjectRecord> {
   const db = getAdminDb();
   const now = Timestamp.now();
   const normalized = normalizeProjectData(data);
+
+  if (isCompanyScope(scope)) {
+    normalized.assigned_company_id = scope.userId;
+  }
 
   const payload = {
     ...normalized,
@@ -289,17 +338,26 @@ export async function createProject(data: ProjectWriteInput): Promise<ProjectRec
   const docRef = await db.collection("projects").add(payload);
   const createdDoc = await docRef.get();
 
-  return mapDocToProjectRecord(docRef.id, createdDoc.data() || {});
+  return applyProjectReadScope(mapDocToProjectRecord(docRef.id, createdDoc.data() || {}), scope);
 }
 
-export async function getProjects(): Promise<ProjectRecord[]> {
+export async function getProjects(scope?: ProjectAccessScope): Promise<ProjectRecord[]> {
   const db = getAdminDb();
   const snapshot = await db.collection("projects").orderBy("updated_at", "desc").get();
 
-  return snapshot.docs.map((doc) => mapDocToProjectRecord(doc.id, doc.data()));
+  const records = snapshot.docs.map((doc) => mapDocToProjectRecord(doc.id, doc.data()));
+  const visibleRecords = isCompanyScope(scope)
+    ? records.filter((record) => record.assigned_company_id === scope.userId)
+    : records;
+
+  return visibleRecords.map((record) => applyProjectReadScope(record, scope));
 }
 
-export async function updateProject(id: string, data: ProjectWriteInput): Promise<ProjectRecord> {
+export async function updateProject(
+  id: string,
+  data: ProjectWriteInput,
+  scope?: ProjectAccessScope,
+): Promise<ProjectRecord> {
   const db = getAdminDb();
   const docRef = db.collection("projects").doc(id);
 
@@ -308,8 +366,14 @@ export async function updateProject(id: string, data: ProjectWriteInput): Promis
     throw new Error("Project not found.");
   }
 
+  assertCompanyProjectWriteAccess((existingDoc.data() || {}) as Record<string, unknown>, scope);
+
   const now = Timestamp.now();
   const normalized = normalizeProjectData(data);
+
+  if (isCompanyScope(scope)) {
+    normalized.assigned_company_id = scope.userId;
+  }
 
   const payload = {
     ...normalized,
@@ -319,10 +383,10 @@ export async function updateProject(id: string, data: ProjectWriteInput): Promis
   await docRef.set(payload, { merge: true });
 
   const updatedDoc = await docRef.get();
-  return mapDocToProjectRecord(id, updatedDoc.data() || {});
+  return applyProjectReadScope(mapDocToProjectRecord(id, updatedDoc.data() || {}), scope);
 }
 
-export async function deleteProject(id: string): Promise<void> {
+export async function deleteProject(id: string, scope?: ProjectAccessScope): Promise<void> {
   const db = getAdminDb();
   const docRef = db.collection("projects").doc(id);
 
@@ -332,6 +396,26 @@ export async function deleteProject(id: string): Promise<void> {
   }
 
   const data = (existingDoc.data() || {}) as Record<string, unknown>;
+  assertCompanyProjectWriteAccess(data, scope);
   await deleteProjectStorageAssets(id, data);
   await docRef.delete();
+}
+
+export async function assertProjectWriteAccess(
+  id: string,
+  scope?: ProjectAccessScope,
+): Promise<void> {
+  if (!isCompanyScope(scope)) {
+    return;
+  }
+
+  const db = getAdminDb();
+  const docRef = db.collection("projects").doc(id);
+  const existingDoc = await docRef.get();
+
+  if (!existingDoc.exists) {
+    throw new Error("Project not found.");
+  }
+
+  assertCompanyProjectWriteAccess((existingDoc.data() || {}) as Record<string, unknown>, scope);
 }

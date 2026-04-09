@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/modules/properties/property.api-auth";
+import { requireApiActor } from "@/modules/properties/property.api-auth";
 import { createProject } from "@/modules/projects/project.service";
 
 export async function POST(request: Request) {
   try {
-    await requireApiUser(request);
+    const actor = await requireApiActor(request);
 
     const payload = (await request.json().catch(() => null)) as {
       data?: Record<string, unknown>;
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const project = await createProject(payload.data);
+    const project = await createProject(payload.data, actor);
 
     return NextResponse.json({
       success: true,
@@ -28,7 +28,12 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to create project.";
-    const status = message === "Unauthorized." ? 401 : 500;
+    const status =
+      message === "Unauthorized" || message === "Unauthorized."
+        ? 401
+        : message === "Forbidden" || message === "Forbidden."
+          ? 403
+          : 500;
 
     return NextResponse.json(
       {

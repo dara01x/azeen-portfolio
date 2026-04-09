@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { getAdminStorageBucket } from "@/lib/firebase/admin";
-import { requireApiUser } from "@/modules/properties/property.api-auth";
+import { requireApiActor } from "@/modules/properties/property.api-auth";
+import { assertPropertyWriteAccess } from "@/modules/properties/property.service";
 
 export const runtime = "nodejs";
 
@@ -45,7 +46,7 @@ function toFirebaseDownloadUrl(bucketName: string, objectPath: string, token: st
 
 export async function POST(request: Request) {
   try {
-    await requireApiUser(request);
+    const actor = await requireApiActor(request);
 
     const formData = await request.formData();
     const propertyId = formData.get("propertyId");
@@ -53,6 +54,8 @@ export async function POST(request: Request) {
     if (typeof propertyId !== "string" || !propertyId.trim()) {
       return Response.json({ success: false, error: "propertyId is required." }, { status: 400 });
     }
+
+    await assertPropertyWriteAccess(propertyId.trim(), actor);
 
     const fileEntries = formData
       .getAll("files")
@@ -115,8 +118,12 @@ export async function POST(request: Request) {
 
     return Response.json({ success: true, urls: uploadedUrls }, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
+    if (error instanceof Error && (error.message === "Unauthorized" || error.message === "Unauthorized.")) {
       return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (error instanceof Error && (error.message === "Forbidden" || error.message === "Forbidden.")) {
+      return Response.json({ success: false, error: "Forbidden." }, { status: 403 });
     }
 
     const message = error instanceof Error ? error.message : "Failed to upload property images.";

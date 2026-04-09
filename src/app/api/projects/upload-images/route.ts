@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getAdminStorageBucket } from "@/lib/firebase/admin";
-import { requireApiUser } from "@/modules/properties/property.api-auth";
+import { requireApiActor } from "@/modules/properties/property.api-auth";
+import { assertProjectWriteAccess } from "@/modules/projects/project.service";
 
 function extensionFromMimeType(type: string): string {
   const normalized = type.toLowerCase();
@@ -18,7 +19,7 @@ function extensionFromMimeType(type: string): string {
 
 export async function POST(request: Request) {
   try {
-    await requireApiUser(request);
+    const actor = await requireApiActor(request);
 
     const formData = await request.formData();
     const projectId = formData.get("projectId");
@@ -32,6 +33,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    await assertProjectWriteAccess(projectId.trim(), actor);
 
     const file = formData.get("file");
 
@@ -72,7 +75,12 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to upload project image.";
-    const status = message === "Unauthorized." ? 401 : 500;
+    const status =
+      message === "Unauthorized" || message === "Unauthorized."
+        ? 401
+        : message === "Forbidden" || message === "Forbidden."
+          ? 403
+          : 500;
 
     return NextResponse.json(
       {

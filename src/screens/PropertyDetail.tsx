@@ -260,6 +260,7 @@ const PropertyDetail = () => {
     typeof property.lat === "number" && Number.isFinite(property.lat) && typeof property.lng === "number" && Number.isFinite(property.lng)
       ? { lat: property.lat, lng: property.lng }
       : null;
+  const canViewAgentContact = user?.role === "admin";
 
   const showImageControls = images.length > 1;
 
@@ -406,16 +407,20 @@ const PropertyDetail = () => {
               </div>
             </div>
 
-            <Separator />
+            {canViewAgentContact ? (
+              <>
+                <Separator />
 
-            <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-2 text-slate-600">
-                <PhoneCall className="h-4 w-4" />
-                <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Contact</span>
-              </div>
-              <p className="font-semibold text-slate-800">{property.contact_name || "—"}</p>
-              <p className="text-sm text-slate-500">{property.primary_mobile_number || "—"}</p>
-            </div>
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-2 text-slate-600">
+                    <PhoneCall className="h-4 w-4" />
+                    <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Contact</span>
+                  </div>
+                  <p className="font-semibold text-slate-800">{property.contact_name || "—"}</p>
+                  <p className="text-sm text-slate-500">{property.primary_mobile_number || "—"}</p>
+                </div>
+              </>
+            ) : null}
 
             <Button asChild className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
               <Link href={`/properties/${id}/edit`}><Edit className="h-4 w-4" />Edit Property</Link>
@@ -525,15 +530,17 @@ const PropertyDetail = () => {
               </CardContent>
             </Card>
 
-            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <CardContent className="p-5">
-                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Contact Information</p>
-                <div className="grid grid-cols-1 gap-4">
-                  <Field label="Contact Name" value={property.contact_name} />
-                  <Field label="Primary Mobile Number" value={property.primary_mobile_number} />
-                </div>
-              </CardContent>
-            </Card>
+            {canViewAgentContact ? (
+              <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <CardContent className="p-5">
+                  <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Contact Information</p>
+                  <div className="grid grid-cols-1 gap-4">
+                    <Field label="Contact Name" value={property.contact_name} />
+                    <Field label="Primary Mobile Number" value={property.primary_mobile_number} />
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
 
             <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
               <CardContent className="p-5 space-y-4">

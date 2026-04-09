@@ -218,6 +218,7 @@ const PropertyForm = () => {
   const [areas, setAreas] = useState<City[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
+  const canViewAgentContact = user?.role === "admin";
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(prev => ({ ...prev, [key]: value }));
   const selectedCoordinates = useMemo<CoordinatesValue | null>(() => {
     if (typeof form.lat === "number" && Number.isFinite(form.lat) && typeof form.lng === "number" && Number.isFinite(form.lng)) {
@@ -445,7 +446,7 @@ const PropertyForm = () => {
         throw new Error("Internal notes are required.");
       }
 
-      if (payload.primary_mobile_number && !isValidPhoneNumber(payload.primary_mobile_number)) {
+      if (canViewAgentContact && payload.primary_mobile_number && !isValidPhoneNumber(payload.primary_mobile_number)) {
         throw new Error("Primary mobile number is invalid.");
       }
 
@@ -788,12 +789,14 @@ const PropertyForm = () => {
           </div>
         </FormSection>
 
-        <FormSection title="Contact Information" description="Owner or agent contact details">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2"><Label>Contact Name (Optional)</Label><Input value={form.contact_name} onChange={e => update("contact_name", e.target.value)} placeholder="Enter contact person name" /></div>
-            <div className="space-y-2"><Label>Primary Mobile Number (Optional)</Label><Input value={form.primary_mobile_number} onChange={e => update("primary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
-          </div>
-        </FormSection>
+        {canViewAgentContact ? (
+          <FormSection title="Contact Information" description="Owner or agent contact details">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="space-y-2"><Label>Contact Name (Optional)</Label><Input value={form.contact_name} onChange={e => update("contact_name", e.target.value)} placeholder="Enter contact person name" /></div>
+              <div className="space-y-2"><Label>Primary Mobile Number (Optional)</Label><Input value={form.primary_mobile_number} onChange={e => update("primary_mobile_number", e.target.value)} placeholder="+9647504001122" /></div>
+            </div>
+          </FormSection>
+        ) : null}
 
         <FormSection title="Internal Notes" description="Private notes not visible to clients">
           <div className="space-y-2">

@@ -1,11 +1,11 @@
-import { requireApiUser } from "@/modules/properties/property.api-auth";
+import { requireApiActor } from "@/modules/properties/property.api-auth";
 import { updateProperty } from "@/modules/properties/property.service";
 
 export const runtime = "nodejs";
 
 export async function PUT(request: Request) {
   try {
-    await requireApiUser(request);
+    const actor = await requireApiActor(request);
 
     const body = await request.json().catch(() => ({}));
     const id = typeof body?.id === "string" ? body.id : "";
@@ -15,15 +15,19 @@ export async function PUT(request: Request) {
       return Response.json({ success: false, error: "Property id is required." }, { status: 400 });
     }
 
-    const property = await updateProperty(id, payload || {});
+    const property = await updateProperty(id, payload || {}, actor);
 
     return Response.json({
       success: true,
       property,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
+    if (error instanceof Error && (error.message === "Unauthorized" || error.message === "Unauthorized.")) {
       return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (error instanceof Error && (error.message === "Forbidden" || error.message === "Forbidden.")) {
+      return Response.json({ success: false, error: "Forbidden." }, { status: 403 });
     }
 
     const message = error instanceof Error ? error.message : "Failed to update property.";

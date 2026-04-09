@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/modules/properties/property.api-auth";
+import { requireApiActor } from "@/modules/properties/property.api-auth";
 import { updateProject } from "@/modules/projects/project.service";
 
 export async function PUT(request: Request) {
   try {
-    await requireApiUser(request);
+    const actor = await requireApiActor(request);
 
     const payload = (await request.json().catch(() => null)) as {
       id?: string;
@@ -31,7 +31,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    const project = await updateProject(payload.id, payload.data);
+    const project = await updateProject(payload.id, payload.data, actor);
 
     return NextResponse.json({
       success: true,
@@ -50,7 +50,12 @@ export async function PUT(request: Request) {
       );
     }
 
-    const status = message === "Unauthorized." ? 401 : 500;
+    const status =
+      message === "Unauthorized" || message === "Unauthorized."
+        ? 401
+        : message === "Forbidden" || message === "Forbidden."
+          ? 403
+          : 500;
 
     return NextResponse.json(
       {

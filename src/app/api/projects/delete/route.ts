@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/modules/properties/property.api-auth";
+import { requireApiActor } from "@/modules/properties/property.api-auth";
 import { deleteProject } from "@/modules/projects/project.service";
 
 export const runtime = "nodejs";
 
 export async function DELETE(request: Request) {
   try {
-    await requireApiUser(request);
+    const actor = await requireApiActor(request);
 
     const body = await request.json().catch(() => ({}));
     const bodyId = typeof body?.id === "string" ? body.id : "";
@@ -23,19 +23,29 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await deleteProject(id);
+    await deleteProject(id, actor);
 
     return NextResponse.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to delete project.";
 
-    if (message === "Unauthorized.") {
+    if (message === "Unauthorized" || message === "Unauthorized.") {
       return NextResponse.json(
         {
           success: false,
           error: "Unauthorized.",
         },
         { status: 401 },
+      );
+    }
+
+    if (message === "Forbidden" || message === "Forbidden.") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Forbidden.",
+        },
+        { status: 403 },
       );
     }
 

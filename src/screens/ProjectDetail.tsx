@@ -270,6 +270,7 @@ const ProjectDetail = () => {
     Number.isFinite(project.lng)
       ? { lat: project.lat, lng: project.lng }
       : null;
+  const canViewAgentContact = user?.role === "admin";
 
   const showPreviousImage = () => {
     if (!showImageControls) {
@@ -421,19 +422,23 @@ const ProjectDetail = () => {
               </div>
             </div>
 
-            <Separator />
+            {canViewAgentContact ? (
+              <>
+                <Separator />
 
-            <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-2 text-slate-600">
-                <PhoneCall className="h-4 w-4" />
-                <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Contact</span>
-              </div>
-              <p className="font-semibold text-slate-800">{project.contact_name || "N/A"}</p>
-              <p className="text-sm text-slate-500">{project.primary_mobile_number || "N/A"}</p>
-              {project.secondary_mobile_number ? (
-                <p className="text-sm text-slate-500">{project.secondary_mobile_number}</p>
-              ) : null}
-            </div>
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-2 text-slate-600">
+                    <PhoneCall className="h-4 w-4" />
+                    <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Contact</span>
+                  </div>
+                  <p className="font-semibold text-slate-800">{project.contact_name || "N/A"}</p>
+                  <p className="text-sm text-slate-500">{project.primary_mobile_number || "N/A"}</p>
+                  {project.secondary_mobile_number ? (
+                    <p className="text-sm text-slate-500">{project.secondary_mobile_number}</p>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
 
             <Button asChild className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
               <Link href={`/projects/${id}/edit`}><Edit className="h-4 w-4" />Edit Project</Link>
@@ -644,15 +649,21 @@ const ProjectDetail = () => {
 
             <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
               <CardContent className="p-5 space-y-4">
-                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3">Contact & Media</p>
+                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3">
+                  {canViewAgentContact ? "Contact & Media" : "Media"}
+                </p>
 
-                <div className="grid grid-cols-1 gap-4">
-                  <Field label="Contact Name" value={project.contact_name} />
-                  <Field label="Primary Mobile Number" value={project.primary_mobile_number} />
-                  <Field label="Secondary Mobile Number" value={project.secondary_mobile_number} />
-                </div>
+                {canViewAgentContact ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-4">
+                      <Field label="Contact Name" value={project.contact_name} />
+                      <Field label="Primary Mobile Number" value={project.primary_mobile_number} />
+                      <Field label="Secondary Mobile Number" value={project.secondary_mobile_number} />
+                    </div>
 
-                <Separator />
+                    <Separator />
+                  </>
+                ) : null}
 
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-slate-400 uppercase tracking-wider inline-flex items-center gap-1.5">

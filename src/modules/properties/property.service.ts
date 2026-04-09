@@ -39,6 +39,11 @@ type PropertyWriteInput = Partial<Property> & {
   description?: Partial<PropertyDescription>;
 };
 
+type PropertyAccessScope = {
+  role: "admin" | "company";
+  userId: string;
+};
+
 function normalizePropertyCode(value: string) {
   return value.trim().toUpperCase();
 }
@@ -88,6 +93,43 @@ function resolvePropertyCode(data: Record<string, unknown>, id: string) {
 
 function asString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
+}
+
+function isCompanyScope(
+  scope?: PropertyAccessScope,
+): scope is PropertyAccessScope & { role: "company" } {
+  return !!scope && scope.role === "company";
+}
+
+function redactPropertyContactFields(record: PropertyRecord): PropertyRecord {
+  return {
+    ...record,
+    contact_name: "",
+    primary_mobile_number: "",
+    secondary_mobile_number: undefined,
+  };
+}
+
+function applyPropertyReadScope(record: PropertyRecord, scope?: PropertyAccessScope): PropertyRecord {
+  if (!isCompanyScope(scope)) {
+    return record;
+  }
+
+  return redactPropertyContactFields(record);
+}
+
+function assertCompanyPropertyWriteAccess(
+  existingData: Record<string, unknown>,
+  scope?: PropertyAccessScope,
+) {
+  if (!isCompanyScope(scope)) {
+    return;
+  }
+
+  const assignedCompanyId = asString(existingData.assigned_company_id).trim();
+  if (!assignedCompanyId || assignedCompanyId !== scope.userId) {
+    throw new Error("Forbidden.");
+  }
 }
 
 function asNumber(value: unknown, fallback = 0) {
@@ -405,10 +447,17 @@ function mapDocToPropertyRecord(id: string, data: Record<string, unknown>): Prop
   };
 }
 
-export async function createProperty(data: PropertyWriteInput): Promise<PropertyRecord> {
+export async function createProperty(
+  data: PropertyWriteInput,
+  scope?: PropertyAccessScope,
+): Promise<PropertyRecord> {
   const db = getAdminDb();
   const now = Timestamp.now();
   const normalized = normalizePropertyData(data);
+
+  if (isCompanyScope(scope)) {
+    normalized.assigned_company_id = scope.userId;
+  }
 
   validateFloorConsistency(normalized);
   const propertyCode = await generateUniquePropertyCode(db);
@@ -424,17 +473,26 @@ export async function createProperty(data: PropertyWriteInput): Promise<Property
   const docRef = await db.collection("properties").add(payload);
   const createdDoc = await docRef.get();
 
-  return mapDocToPropertyRecord(docRef.id, createdDoc.data() || {});
+  return applyPropertyReadScope(mapDocToPropertyRecord(docRef.id, createdDoc.data() || {}), scope);
 }
 
-export async function getProperties(): Promise<PropertyRecord[]> {
+export async function getProperties(scope?: PropertyAccessScope): Promise<PropertyRecord[]> {
   const db = getAdminDb();
   const snapshot = await db.collection("properties").orderBy("updated_at", "desc").get();
 
-  return snapshot.docs.map((doc) => mapDocToPropertyRecord(doc.id, doc.data()));
+  const records = snapshot.docs.map((doc) => mapDocToPropertyRecord(doc.id, doc.data()));
+  const visibleRecords = isCompanyScope(scope)
+    ? records.filter((record) => record.assigned_company_id === scope.userId)
+    : records;
+
+  return visibleRecords.map((record) => applyPropertyReadScope(record, scope));
 }
 
-export async function updateProperty(id: string, data: PropertyWriteInput): Promise<PropertyRecord> {
+export async function updateProperty(
+  id: string,
+  data: PropertyWriteInput,
+  scope?: PropertyAccessScope,
+): Promise<PropertyRecord> {
   const db = getAdminDb();
   const docRef = db.collection("properties").doc(id);
 
@@ -443,8 +501,14 @@ export async function updateProperty(id: string, data: PropertyWriteInput): Prom
     throw new Error("Property not found.");
   }
 
+  assertCompanyPropertyWriteAccess((existingDoc.data() || {}) as Record<string, unknown>, scope);
+
   const now = Timestamp.now();
   const normalized = normalizePropertyData(data);
+
+  if (isCompanyScope(scope)) {
+    normalized.assigned_company_id = scope.userId;
+  }
 
   validateFloorConsistency(normalized);
 
@@ -457,10 +521,10 @@ export async function updateProperty(id: string, data: PropertyWriteInput): Prom
   await docRef.set(payload, { merge: true });
 
   const updatedDoc = await docRef.get();
-  return mapDocToPropertyRecord(id, updatedDoc.data() || {});
+  return applyPropertyReadScope(mapDocToPropertyRecord(id, updatedDoc.data() || {}), scope);
 }
 
-export async function deleteProperty(id: string): Promise<void> {
+export async function deleteProperty(id: string, scope?: PropertyAccessScope): Promise<void> {
   const db = getAdminDb();
   const docRef = db.collection("properties").doc(id);
 
@@ -470,6 +534,26 @@ export async function deleteProperty(id: string): Promise<void> {
   }
 
   const data = (existingDoc.data() || {}) as Record<string, unknown>;
+  assertCompanyPropertyWriteAccess(data, scope);
   await deletePropertyStorageAssets(id, data);
   await docRef.delete();
+}
+
+export async function assertPropertyWriteAccess(
+  id: string,
+  scope?: PropertyAccessScope,
+): Promise<void> {
+  if (!isCompanyScope(scope)) {
+    return;
+  }
+
+  const db = getAdminDb();
+  const docRef = db.collection("properties").doc(id);
+  const existingDoc = await docRef.get();
+
+  if (!existingDoc.exists) {
+    throw new Error("Property not found.");
+  }
+
+  assertCompanyPropertyWriteAccess((existingDoc.data() || {}) as Record<string, unknown>, scope);
 }
