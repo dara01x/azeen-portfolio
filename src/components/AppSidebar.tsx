@@ -1,6 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
-  Building2, FolderKanban, Users, UserCog, Settings, Database, BarChart3,
+  Building2, FolderKanban, Users, UserCog, Database, BarChart3,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -20,7 +21,6 @@ const mainNav = [
 
 const systemNav = [
   { title: "App Variables", url: "/app-variables", icon: Database },
-  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -38,8 +38,15 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="px-4 py-5">
         <Link href="/" className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 text-primary-foreground font-bold text-sm shadow-sm">
-            A
+          <div className="relative h-9 w-9 overflow-hidden rounded-lg border bg-background shadow-sm">
+            <Image
+              src="/azeen-logo.webp"
+              alt="Azeen logo"
+              fill
+              sizes="36px"
+              className="object-contain p-0.5"
+              priority
+            />
           </div>
           {!collapsed && (
             <div>

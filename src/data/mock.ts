@@ -1,4 +1,4 @@
-import type { PropertyType, City, Amenity, ViewType, Client, User, Property, Project, AppSettings } from "@/types";
+import type { PropertyType, City, Amenity, ViewType, Client, User, Property, Project } from "@/types";
 
 export const mockPropertyTypes: PropertyType[] = [];
 
@@ -15,8 +15,3 @@ export const mockUsers: User[] = [];
 export const mockProperties: Property[] = [];
 
 export const mockProjects: Project[] = [];
-
-export const mockSettings: AppSettings = {
-  allow_company_create_properties: false,
-  allow_company_edit_properties: false,
-};

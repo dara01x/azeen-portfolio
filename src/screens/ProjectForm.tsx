@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -24,23 +23,6 @@ import {
 } from "@/modules/projects/project.client";
 import type { Project, User } from "@/types";
 
-const LocationPickerMap = dynamic(
-  () => import("@/components/PropertyLocationMap").then((mod) => mod.PropertyLocationPickerMap),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-72 w-full rounded-lg border bg-muted/40 flex items-center justify-center text-sm text-muted-foreground">
-        Loading map...
-      </div>
-    ),
-  },
-);
-
-type CoordinatesValue = {
-  lat: number;
-  lng: number;
-};
-
 type LocalImageFileMap = Record<string, File>;
 
 const OPTIONAL_LINK_NONE = "__none__";
@@ -50,52 +32,6 @@ const PROJECT_STATUS_OPTIONS: Array<{ value: Project["status"]; label: string }>
   { value: "completed", label: "Completed" },
   { value: "archived", label: "Archived" },
 ];
-
-const CURRENCY_OPTIONS: Array<{ value: Project["currency"]; label: string }> = [
-  { value: "USD", label: "USD" },
-  { value: "IQD", label: "IQD" },
-];
-
-const PAYMENT_TYPE_OPTIONS: Array<{ value: Project["payment_type"]; label: string }> = [
-  { value: "cash", label: "Cash" },
-  { value: "installment", label: "Installment" },
-];
-
-function parseOptionalNumber(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function normalizePhoneNumber(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  let normalized = trimmed.replace(/[\s\-()]/g, "");
-  normalized = normalized.replace(/(?!^)\+/g, "");
-
-  if (normalized.startsWith("00")) {
-    normalized = `+${normalized.slice(2)}`;
-  }
-
-  return normalized;
-}
-
-function isValidPhoneNumber(value: string): boolean {
-  return /^\+?\d{7,15}$/.test(value);
-}
-
-function isValidCoordinates(lat?: number, lng?: number): boolean {
-  const hasLat = typeof lat === "number" && Number.isFinite(lat);
-  const hasLng = typeof lng === "number" && Number.isFinite(lng);
-  return (!hasLat && !hasLng) || (hasLat && hasLng);
-}
 
 function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   const uploadedImages: string[] = [];
@@ -136,14 +72,6 @@ function getPreferredText(...values: Array<string | undefined>) {
 
 function isProjectStatus(value: string): value is Project["status"] {
   return value === "active" || value === "completed" || value === "archived";
-}
-
-function isCurrency(value: string): value is Project["currency"] {
-  return value === "USD" || value === "IQD";
-}
-
-function isPaymentType(value: string): value is Project["payment_type"] {
-  return value === "cash" || value === "installment";
 }
 
 const defaultProject: Omit<Project, "id"> = {
@@ -206,26 +134,12 @@ const ProjectForm = () => {
   const [cities, setCities] = useState<AppVariableItem[]>([]);
   const [areas, setAreas] = useState<AppVariableItem[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
-  const [amenities, setAmenities] = useState<AppVariableItem[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
 
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
-
-  const selectedCoordinates = useMemo<CoordinatesValue | null>(() => {
-    if (
-      typeof form.lat === "number" &&
-      Number.isFinite(form.lat) &&
-      typeof form.lng === "number" &&
-      Number.isFinite(form.lng)
-    ) {
-      return { lat: form.lat, lng: form.lng };
-    }
-
-    return null;
-  }, [form.lat, form.lng]);
   const areaNames = useMemo(
     () => Array.from(new Set(areas.map((item) => item.name.trim()).filter(Boolean))),
     [areas],
@@ -250,9 +164,8 @@ const ProjectForm = () => {
       getVariables("cities"),
       getVariables("areas"),
       getVariables("property_types"),
-      getVariables("amenities"),
     ])
-      .then(([cityItems, areaItems, propertyTypeItems, amenityItems]) => {
+      .then(([cityItems, areaItems, propertyTypeItems]) => {
         if (cancelled) {
           return;
         }
@@ -260,7 +173,6 @@ const ProjectForm = () => {
         setCities(cityItems);
         setAreas(areaItems);
         setPropertyTypes(propertyTypeItems);
-        setAmenities(amenityItems);
       })
       .catch((fetchError) => {
         if (!cancelled) {
@@ -369,8 +281,6 @@ const ProjectForm = () => {
     setError(null);
 
     try {
-      const normalizedPrimaryMobileNumber = normalizePhoneNumber(form.primary_mobile_number || "");
-      const normalizedSecondaryMobileNumber = normalizePhoneNumber(form.secondary_mobile_number || "");
       const singleAddressValue = getPreferredText(
         form.address_en,
         form.address_ku,
@@ -397,51 +307,24 @@ const ProjectForm = () => {
         address_ku: singleAddressValue,
         address_ar: singleAddressValue,
         property_type_ids: Array.from(new Set(form.property_type_ids.map((item) => item.trim()).filter(Boolean))),
-        amenities: Array.from(new Set(form.amenities.map((item) => item.trim()).filter(Boolean))),
+        amenities: Array.from(new Set((form.amenities || []).map((item) => item.trim()).filter(Boolean))),
         area_size: Number(form.area_size) || 0,
         starting_price: Number(form.starting_price) || 0,
-        contact_name: form.contact_name.trim(),
-        primary_mobile_number: normalizedPrimaryMobileNumber,
-        secondary_mobile_number: normalizedSecondaryMobileNumber || undefined,
         assigned_company_id: form.assigned_company_id || undefined,
         video_url: form.video_url?.trim() || undefined,
-        internal_notes: form.internal_notes?.trim() || undefined,
+        internal_notes: (form.internal_notes || "").trim(),
       };
 
       if (!payload.title) {
         throw new Error("Project name is required.");
       }
 
-      if (!payload.city_id) {
-        throw new Error("City is required.");
+      if (!payload.area) {
+        throw new Error("Area is required.");
       }
 
-      if (payload.property_type_ids.length === 0) {
-        throw new Error("Please select at least one property type.");
-      }
-
-      if (!Number.isFinite(payload.area_size) || payload.area_size <= 0) {
-        throw new Error("Area (m2) is required.");
-      }
-
-      if (!Number.isFinite(payload.starting_price) || payload.starting_price <= 0) {
-        throw new Error("Starting price is required.");
-      }
-
-      if (!payload.payment_type) {
-        throw new Error("Payment method is required.");
-      }
-
-      if (!isValidCoordinates(payload.lat, payload.lng)) {
-        throw new Error("Coordinates must be empty or include valid latitude and longitude.");
-      }
-
-      if (payload.primary_mobile_number && !isValidPhoneNumber(payload.primary_mobile_number)) {
-        throw new Error("Primary mobile number is invalid.");
-      }
-
-      if (payload.secondary_mobile_number && !isValidPhoneNumber(payload.secondary_mobile_number)) {
-        throw new Error("Secondary mobile number is invalid.");
+      if (!payload.internal_notes) {
+        throw new Error("Internal notes are required.");
       }
 
       const activeLocalFiles = Object.fromEntries(
@@ -541,7 +424,7 @@ const ProjectForm = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Status</Label>
+                <Label>Status (Optional)</Label>
                 <Select
                   value={form.status}
                   onValueChange={(value) => {
@@ -560,8 +443,7 @@ const ProjectForm = () => {
               </div>
 
               <div className="sm:col-span-2">
-                <Label className="mb-2 block">Property Types *</Label>
-                <p className="mb-3 text-xs text-muted-foreground">Please select at least one property type.</p>
+                <Label className="mb-2 block">Property Types (Optional)</Label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {propertyTypes.map((typeItem) => (
                     <label key={typeItem.id} className="flex items-center gap-2.5 text-sm rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary/30 has-[:checked]:bg-primary/5">
@@ -584,75 +466,20 @@ const ProjectForm = () => {
             </div>
           </FormSection>
 
-          <FormSection title="Pricing" description="Project commercial details">
-            <div className="grid gap-5 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Starting Price *</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={form.starting_price || ""}
-                  onChange={(e) => update("starting_price", Math.max(0, Number(e.target.value) || 0))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Currency</Label>
-                <Select
-                  value={form.currency}
-                  onValueChange={(value) => {
-                    if (isCurrency(value)) {
-                      update("currency", value);
-                    }
-                  }}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CURRENCY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Payment Method *</Label>
-                <Select
-                  value={form.payment_type}
-                  onValueChange={(value) => {
-                    if (isPaymentType(value)) {
-                      update("payment_type", value);
-                    }
-                  }}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_TYPE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Area (m2) *</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={form.area_size || ""}
-                  onChange={(e) => update("area_size", Math.max(0, Number(e.target.value) || 0))}
-                />
-              </div>
-            </div>
-          </FormSection>
-
           <FormSection title="Location">
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>City *</Label>
-                <Select value={form.city_id} onValueChange={(value) => update("city_id", value)}>
-                  <SelectTrigger><SelectValue placeholder="Select city" /></SelectTrigger>
+                <Label>City (Optional)</Label>
+                <Select
+                  value={form.city_id || OPTIONAL_LINK_NONE}
+                  onValueChange={(value) => update("city_id", value === OPTIONAL_LINK_NONE ? "" : value)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select city (optional)" /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={OPTIONAL_LINK_NONE}>None</SelectItem>
+                    {!hasOptionById(cities, form.city_id) && form.city_id ? (
+                      <SelectItem value={form.city_id}>Current: {form.city_id}</SelectItem>
+                    ) : null}
                     {cities.map((cityItem) => (
                       <SelectItem key={cityItem.id} value={cityItem.id}>{cityItem.name}</SelectItem>
                     ))}
@@ -661,14 +488,10 @@ const ProjectForm = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Area</Label>
-                <Select
-                  value={form.area || OPTIONAL_LINK_NONE}
-                  onValueChange={(value) => update("area", value === OPTIONAL_LINK_NONE ? "" : value)}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select area (optional)" /></SelectTrigger>
+                <Label>Area *</Label>
+                <Select value={form.area} onValueChange={(value) => update("area", value)}>
+                  <SelectTrigger><SelectValue placeholder="Select area" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={OPTIONAL_LINK_NONE}>None</SelectItem>
                     {form.area.trim() && !areaNames.includes(form.area.trim()) ? (
                       <SelectItem value={form.area}>Current: {form.area}</SelectItem>
                     ) : null}
@@ -683,7 +506,7 @@ const ProjectForm = () => {
               </div>
 
               <div className="sm:col-span-2 space-y-2">
-                <Label>Address</Label>
+                <Label>Address (Optional)</Label>
                 <Input
                   value={getPreferredText(form.address_en, form.address_ku, form.address_ar, form.address)}
                   onChange={(e) => {
@@ -696,72 +519,12 @@ const ProjectForm = () => {
                   placeholder="Enter address in any language"
                 />
               </div>
-
-              <Separator className="sm:col-span-2" />
-
-              <div className="space-y-2">
-                <Label>Latitude</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={form.lat ?? ""}
-                  onChange={(e) => update("lat", parseOptionalNumber(e.target.value))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Longitude</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={form.lng ?? ""}
-                  onChange={(e) => update("lng", parseOptionalNumber(e.target.value))}
-                />
-              </div>
-
-              <div className="sm:col-span-2 space-y-2">
-                <Label>Map Location</Label>
-                <LocationPickerMap
-                  coordinates={selectedCoordinates}
-                  onChange={(coordinates) => {
-                    update("lat", coordinates.lat);
-                    update("lng", coordinates.lng);
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Click on the map to set the exact location. Latitude and longitude update automatically.
-                </p>
-              </div>
-            </div>
-          </FormSection>
-
-          <FormSection title="Features & Amenities">
-            <div>
-              <Label className="mb-3 block">Amenities</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {amenities.map((amenityItem) => (
-                  <label key={amenityItem.id} className="flex items-center gap-2.5 text-sm rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary/30 has-[:checked]:bg-primary/5">
-                    <Checkbox
-                      checked={form.amenities.includes(amenityItem.id)}
-                      onCheckedChange={(checked) => {
-                        update(
-                          "amenities",
-                          checked
-                            ? [...form.amenities, amenityItem.id]
-                            : form.amenities.filter((idValue) => idValue !== amenityItem.id),
-                        );
-                      }}
-                    />
-                    {amenityItem.name}
-                  </label>
-                ))}
-              </div>
             </div>
           </FormSection>
 
           <FormSection title="Description" description="Project description in any language">
             <div className="space-y-2">
-              <Label>Description</Label>
+              <Label>Description (Optional)</Label>
               <Textarea
                 value={getPreferredText(
                   form.description_en,
@@ -782,37 +545,10 @@ const ProjectForm = () => {
             </div>
           </FormSection>
 
-          <FormSection title="Contact Information" description="Agent contact details">
-            <div className="grid gap-5 sm:grid-cols-3">
-              <div className="space-y-2 sm:col-span-3">
-                <Label>Agent Name</Label>
-                <Input value={form.contact_name} onChange={(e) => update("contact_name", e.target.value)} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Primary Mobile Number</Label>
-                <Input
-                  value={form.primary_mobile_number}
-                  onChange={(e) => update("primary_mobile_number", e.target.value)}
-                  placeholder="+9647..."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Secondary Mobile Number</Label>
-                <Input
-                  value={form.secondary_mobile_number || ""}
-                  onChange={(e) => update("secondary_mobile_number", e.target.value)}
-                  placeholder="Optional"
-                />
-              </div>
-            </div>
-          </FormSection>
-
           <FormSection title="Media">
             <div className="space-y-5">
               <div>
-                <Label className="mb-3 block">Images</Label>
+                <Label className="mb-3 block">Images (Optional)</Label>
                 <ImageUpload
                   images={form.images}
                   onLocalFilesAdded={(entries) => {
@@ -849,7 +585,7 @@ const ProjectForm = () => {
               </div>
               <Separator />
               <div className="space-y-2">
-                <Label>Video URL</Label>
+                <Label>Video URL (Optional)</Label>
                 <Input
                   value={form.video_url || ""}
                   onChange={(e) => update("video_url", e.target.value)}
@@ -861,7 +597,7 @@ const ProjectForm = () => {
 
           <FormSection title="Assignment">
             <div className="space-y-2 sm:w-1/2">
-              <Label>Assigned Company</Label>
+              <Label>Assigned Company (Optional)</Label>
               <Select
                 value={form.assigned_company_id || OPTIONAL_LINK_NONE}
                 onValueChange={(value) =>
@@ -885,12 +621,15 @@ const ProjectForm = () => {
           </FormSection>
 
           <FormSection title="Internal Notes">
-            <Textarea
-              value={form.internal_notes || ""}
-              onChange={(e) => update("internal_notes", e.target.value)}
-              rows={4}
-              placeholder="Add any internal notes..."
-            />
+            <div className="space-y-2">
+              <Label>Notes *</Label>
+              <Textarea
+                value={form.internal_notes || ""}
+                onChange={(e) => update("internal_notes", e.target.value)}
+                rows={4}
+                placeholder="Add any internal notes..."
+              />
+            </div>
           </FormSection>
 
           <div className="flex justify-end gap-3 pb-8">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/auth/login";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -49,9 +50,19 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Sign In</CardTitle>
-          <CardDescription>Log in with your account to access the dashboard.</CardDescription>
+        <CardHeader className="space-y-2">
+          <div className="mx-auto relative h-16 w-16 overflow-hidden rounded-xl border bg-background shadow-sm">
+            <Image
+              src="/azeen-logo.webp"
+              alt="Azeen logo"
+              fill
+              sizes="64px"
+              className="object-contain p-1"
+              priority
+            />
+          </div>
+          <CardTitle className="text-center">Sign In</CardTitle>
+          <CardDescription className="text-center">Log in with your account to access the dashboard.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

@@ -134,9 +134,3 @@ export interface Project {
   assigned_company_id?: string;
   internal_notes?: string;
 }
-
-// Settings
-export interface AppSettings {
-  allow_company_create_properties: boolean;
-  allow_company_edit_properties: boolean;
-}

@@ -8,18 +8,18 @@ export const metadata: Metadata = {
   description: "azeen Web Application",
   authors: [{ name: "azeen" }],
   icons: {
-    icon: "/azeen-favicon.svg",
+    icon: "/azeen-logo.webp",
   },
   openGraph: {
     title: "azeen App",
     description: "azeen Web Application",
     type: "website",
-    images: ["/azeen-og-image.svg"],
+    images: ["/azeen-logo.webp"],
   },
   twitter: {
     card: "summary_large_image",
     site: "@azeen",
-    images: ["/azeen-og-image.svg"],
+    images: ["/azeen-logo.webp"],
   },
 };
 
