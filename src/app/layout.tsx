@@ -3,7 +3,10 @@ import Providers from "./providers";
 import "../index.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+const metadataBaseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(metadataBaseUrl),
   title: "azeen App",
   description: "azeen Web Application",
   authors: [{ name: "azeen" }],

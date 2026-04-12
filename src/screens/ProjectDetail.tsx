@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, ChevronLeft, ChevronRight, Edit, Video } from "lucide-react";
+import { ArrowLeft, Bath, BedDouble, ChevronLeft, ChevronRight, Edit, Eye, Home, Maximize, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -9,10 +9,11 @@ import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getProjectById } from "@/modules/projects/project.client";
+import { getUnits } from "@/modules/units/unit.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import type { AppVariableItem } from "@/modules/app-variables/types";
 import { useAuth } from "@/lib/auth/useAuth";
-import type { Project } from "@/types";
+import type { Project, Unit, UnitOption } from "@/types";
 
 const Field = ({ label, value }: { label: string; value: string | number }) => (
   <div className="space-y-0.5">
@@ -49,6 +50,75 @@ function formatEnumLabel(value?: string | null) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function getUnitOptions(unit: Unit): UnitOption[] {
+  if (unit.properties && unit.properties.length > 0) {
+    return unit.properties;
+  }
+
+  return [
+    {
+      price: Number(unit.price) || 0,
+      currency: unit.currency === "IQD" ? "IQD" : "USD",
+      interface: [],
+      building_no: "",
+      floor_no: unit.floor_number !== undefined ? String(unit.floor_number) : "",
+      active: unit.status !== "sold",
+      sold: unit.status === "sold",
+    },
+  ];
+}
+
+function getUnitFeatures(unit: Unit) {
+  return {
+    bedrooms: Number(unit.features?.bedrooms ?? unit.bedrooms ?? 0),
+    bathrooms: Number(unit.features?.bathrooms ?? unit.bathrooms ?? 0),
+    suitRooms: Number(unit.features?.suit_rooms ?? unit.suit_rooms ?? 0),
+  };
+}
+
+function formatUnitOptionPrice(option: UnitOption) {
+  const price = Number(option.price) || 0;
+  const currencyLabel = option.currency === "IQD" ? "IQD" : "USD";
+
+  return `${price.toLocaleString()} ${currencyLabel}`;
+}
+
+function getUnitOptionStatusLabel(option: UnitOption) {
+  if (option.sold) {
+    return "Sold";
+  }
+
+  if (option.active) {
+    return "Available";
+  }
+
+  return "Inactive";
+}
+
+function getUnitImages(unit: Unit): string[] {
+  if (Array.isArray(unit.images) && unit.images.length > 0) {
+    return unit.images;
+  }
+
+  if (unit.main_image) {
+    return [unit.main_image];
+  }
+
+  return [];
+}
+
+function getUnitOptionStats(unit: Unit) {
+  const options = getUnitOptions(unit);
+  const soldCount = options.filter((option) => option.sold).length;
+  const availableCount = options.filter((option) => option.active && !option.sold).length;
+
+  return {
+    total: options.length,
+    sold: soldCount,
+    available: availableCount,
+  };
+}
+
 const ProjectDetail = () => {
   const params = useParams<{ id: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -61,8 +131,15 @@ const ProjectDetail = () => {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(true);
+  const [unitsError, setUnitsError] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
+  const [isUnitViewOpen, setIsUnitViewOpen] = useState(false);
+  const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
+  const [activeUnitImageIndex, setActiveUnitImageIndex] = useState(0);
+  const [isUnitImageZoomOpen, setIsUnitImageZoomOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading || !user || !id) {
@@ -89,6 +166,40 @@ const ProjectDetail = () => {
       .finally(() => {
         if (!cancelled) {
           setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, id, user]);
+
+  useEffect(() => {
+    if (authLoading || !user || !id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    setUnitsLoading(true);
+    setUnitsError(null);
+
+    getUnits()
+      .then((items) => {
+        if (!cancelled) {
+          setUnits((items as Unit[]).filter((item) => item.project_id === id));
+        }
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          const message = loadError instanceof Error ? loadError.message : "Failed to load units.";
+          setUnitsError(message);
+          setUnits([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setUnitsLoading(false);
         }
       });
 
@@ -143,6 +254,23 @@ const ProjectDetail = () => {
       return current >= availableImages.length ? 0 : current;
     });
   }, [project]);
+
+  useEffect(() => {
+    if (!selectedUnit) {
+      setActiveUnitImageIndex(0);
+      setIsUnitImageZoomOpen(false);
+      return;
+    }
+
+    const unitImages = getUnitImages(selectedUnit);
+    setActiveUnitImageIndex((current) => {
+      if (unitImages.length === 0) {
+        return 0;
+      }
+
+      return current >= unitImages.length ? 0 : current;
+    });
+  }, [selectedUnit]);
 
   if (loading) {
     return (
@@ -230,6 +358,36 @@ const ProjectDetail = () => {
   const showRelationsCard = !!assignedCompanyLabel;
   const showLeftColumn = showLocationCard || showDescriptionCard || showNotesCard;
   const showRightColumn = showOverviewCard || showTypesCard || showVideoCard || showRelationsCard;
+  const getUnitTypeLabel = (typeId?: string) => (typeId ? findVariableName(propertyTypes, typeId) : "No type");
+  const closeUnitView = () => {
+    setIsUnitImageZoomOpen(false);
+    setIsUnitViewOpen(false);
+    setSelectedUnit(null);
+  };
+
+  const selectedUnitImages = selectedUnit ? getUnitImages(selectedUnit) : [];
+  const hasSelectedUnitImages = selectedUnitImages.length > 0;
+  const safeSelectedUnitImageIndex =
+    selectedUnitImages.length > 0 && activeUnitImageIndex < selectedUnitImages.length ? activeUnitImageIndex : 0;
+  const selectedUnitActiveImage =
+    selectedUnitImages.length > 0 ? selectedUnitImages[safeSelectedUnitImageIndex] : undefined;
+  const showSelectedUnitImageControls = selectedUnitImages.length > 1;
+
+  const showPreviousSelectedUnitImage = () => {
+    if (!showSelectedUnitImageControls) {
+      return;
+    }
+
+    setActiveUnitImageIndex((current) => (current - 1 + selectedUnitImages.length) % selectedUnitImages.length);
+  };
+
+  const showNextSelectedUnitImage = () => {
+    if (!showSelectedUnitImageControls) {
+      return;
+    }
+
+    setActiveUnitImageIndex((current) => (current + 1) % selectedUnitImages.length);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50/50">
@@ -465,6 +623,133 @@ const ProjectDetail = () => {
             ) : null}
           </div>
         ) : null}
+
+        <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base">Available Units</CardTitle>
+              {!unitsLoading && !unitsError ? (
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  {units.length} {units.length === 1 ? "Unit" : "Units"}
+                </span>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {unitsLoading ? (
+              <p className="text-sm text-slate-500">Loading units...</p>
+            ) : unitsError ? (
+              <p className="text-sm text-destructive">{unitsError}</p>
+            ) : units.length === 0 ? (
+              <p className="text-sm text-slate-500">No units have been added to this project yet.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {units.map((unit) => {
+                  const unitOptions = getUnitOptions(unit);
+                  const optionStats = getUnitOptionStats(unit);
+                  const unitFeatures = getUnitFeatures(unit);
+                  const unitTypeLabel = getUnitTypeLabel(unit.type_id);
+                  const coverImage = unit.main_image || unit.images?.[0];
+
+                  return (
+                    <div
+                      key={unit.id}
+                      className="overflow-hidden rounded-xl border border-slate-200 transition-all hover:border-blue-300 hover:shadow-md"
+                    >
+                      {coverImage ? (
+                        <div className="relative h-44 bg-slate-100">
+                          <img src={coverImage} alt={unit.title || unitTypeLabel} className="h-full w-full object-cover" />
+                        </div>
+                      ) : null}
+
+                      <div className="p-4">
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-lg font-semibold text-slate-900">{unit.title || unitTypeLabel}</p>
+                            <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500">
+                              <Maximize className="h-3.5 w-3.5" />
+                              {(Number(unit.area_size) || 0).toLocaleString()} m2
+                            </p>
+                          </div>
+                          <StatusBadge status={unit.status} />
+                        </div>
+
+                        <p className="text-xs text-slate-500">
+                          {unitTypeLabel}
+                          {unit.unit_number ? ` • ${unit.unit_number}` : ""}
+                        </p>
+
+                        {unitFeatures.bedrooms > 0 || unitFeatures.bathrooms > 0 || unitFeatures.suitRooms > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-600">
+                            {unitFeatures.bedrooms > 0 ? (
+                              <span className="inline-flex items-center gap-1">
+                                <BedDouble className="h-3.5 w-3.5" />
+                                {unitFeatures.bedrooms} Bed{unitFeatures.bedrooms === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+                            {unitFeatures.bathrooms > 0 ? (
+                              <span className="inline-flex items-center gap-1">
+                                <Bath className="h-3.5 w-3.5" />
+                                {unitFeatures.bathrooms} Bath{unitFeatures.bathrooms === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+                            {unitFeatures.suitRooms > 0 ? (
+                              <span className="inline-flex items-center gap-1">
+                                <Home className="h-3.5 w-3.5" />
+                                {unitFeatures.suitRooms} Suite{unitFeatures.suitRooms === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-4 border-t border-slate-100 pt-3">
+                          <p className="mb-2 text-xs font-medium text-slate-500">
+                            {optionStats.total} {optionStats.total === 1 ? "Option" : "Options"} • {optionStats.available} Available
+                            {optionStats.sold > 0 ? ` • ${optionStats.sold} Sold` : ""}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {unitOptions.slice(0, 3).map((option, index) => (
+                              <span
+                                key={`${unit.id}-option-${index}`}
+                                className="rounded bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700"
+                              >
+                                {formatUnitOptionPrice(option)}
+                              </span>
+                            ))}
+                            {unitOptions.length > 3 ? (
+                              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                                +{unitOptions.length - 3} more
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => {
+                              setSelectedUnit(unit);
+                              setIsUnitViewOpen(true);
+                            }}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            View
+                          </Button>
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/projects/${project.id}/edit`}>Manage</Link>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <Dialog open={isImageZoomOpen} onOpenChange={setIsImageZoomOpen}>
@@ -498,6 +783,200 @@ const ProjectDetail = () => {
                     className="absolute right-3 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-black/70 text-white hover:bg-black/80"
                     onClick={showNextImage}
                     aria-label="Next image"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isUnitViewOpen} onOpenChange={(open) => (open ? setIsUnitViewOpen(true) : closeUnitView())}>
+        <DialogContent className="max-w-2xl">
+          <DialogTitle>Unit Details</DialogTitle>
+          <DialogDescription>Read-only unit information and available options.</DialogDescription>
+
+          {selectedUnit ? (
+            <div className="space-y-4">
+              {hasSelectedUnitImages ? (
+                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <div className="relative overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+                    <button
+                      type="button"
+                      className="block w-full cursor-zoom-in"
+                      onClick={() => setIsUnitImageZoomOpen(true)}
+                      aria-label="Zoom unit image"
+                    >
+                      <img
+                        src={selectedUnitActiveImage}
+                        alt={selectedUnit.title || getUnitTypeLabel(selectedUnit.type_id)}
+                        className="h-56 w-full object-cover"
+                      />
+                    </button>
+
+                    <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
+                      {safeSelectedUnitImageIndex + 1} / {selectedUnitImages.length}
+                    </span>
+
+                    {showSelectedUnitImageControls ? (
+                      <>
+                        <button
+                          type="button"
+                          className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow hover:bg-white"
+                          onClick={showPreviousSelectedUnitImage}
+                          aria-label="Previous unit image"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow hover:bg-white"
+                          onClick={showNextSelectedUnitImage}
+                          aria-label="Next unit image"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+
+                  {selectedUnitImages.length > 1 ? (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {selectedUnitImages.map((imageUrl, index) => (
+                        <img
+                          key={`${selectedUnit.id}-thumb-${index}`}
+                          src={imageUrl}
+                          alt={`Unit image ${index + 1}`}
+                          className={`h-14 w-20 cursor-pointer rounded border object-cover transition-all ${
+                            index === safeSelectedUnitImageIndex
+                              ? "border-slate-900 ring-1 ring-slate-900"
+                              : "border-slate-200 hover:border-slate-400"
+                          }`}
+                          onClick={() => setActiveUnitImageIndex(index)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="space-y-1">
+                <p className="text-lg font-semibold text-slate-900">
+                  {selectedUnit.title || getUnitTypeLabel(selectedUnit.type_id)}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {getUnitTypeLabel(selectedUnit.type_id)}
+                  {selectedUnit.unit_number ? ` • ${selectedUnit.unit_number}` : ""}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div className="rounded-lg border border-slate-200 px-3 py-2">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Status</p>
+                  <p className="font-medium text-slate-700 capitalize">{selectedUnit.status}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 px-3 py-2">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Area</p>
+                  <p className="font-medium text-slate-700">{(Number(selectedUnit.area_size) || 0).toLocaleString()} m2</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 px-3 py-2">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Payment</p>
+                  <p className="font-medium text-slate-700 capitalize">{selectedUnit.payment_type}</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 px-3 py-2">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Options</p>
+                  <p className="font-medium text-slate-700">{getUnitOptions(selectedUnit).length}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-4 text-xs text-slate-600">
+                <span className="inline-flex items-center gap-1">
+                  <BedDouble className="h-3.5 w-3.5" />
+                  {Number(selectedUnit.features?.bedrooms ?? selectedUnit.bedrooms ?? 0)} Beds
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Bath className="h-3.5 w-3.5" />
+                  {Number(selectedUnit.features?.bathrooms ?? selectedUnit.bathrooms ?? 0)} Baths
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Home className="h-3.5 w-3.5" />
+                  {Number(selectedUnit.features?.suit_rooms ?? selectedUnit.suit_rooms ?? 0)} Suites
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-slate-700">Unit Options</p>
+                {getUnitOptions(selectedUnit).map((option, index) => (
+                  <div key={`${selectedUnit.id}-view-option-${index}`} className="rounded-lg border border-slate-200 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-slate-800">Option #{index + 1}</p>
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                        {getUnitOptionStatusLabel(option)}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-1.5 text-xs text-slate-600 sm:grid-cols-2">
+                      <p>
+                        <span className="font-medium text-slate-700">Price:</span> {formatUnitOptionPrice(option)}
+                      </p>
+                      <p>
+                        <span className="font-medium text-slate-700">Building:</span> {option.building_no || "-"}
+                      </p>
+                      <p>
+                        <span className="font-medium text-slate-700">Floor:</span> {option.floor_no || "-"}
+                      </p>
+                      <p>
+                        <span className="font-medium text-slate-700">Interface:</span> {option.interface.length > 0 ? option.interface.join(", ") : "-"}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end">
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/projects/${project.id}/edit`} onClick={closeUnitView}>Manage in Project Edit</Link>
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isUnitImageZoomOpen} onOpenChange={setIsUnitImageZoomOpen}>
+        <DialogContent className="max-w-[95vw] border-none bg-transparent p-0 shadow-none [&>button]:right-3 [&>button]:top-3 [&>button]:rounded-full [&>button]:bg-black/70 [&>button]:text-white [&>button]:opacity-100">
+          <DialogTitle className="sr-only">Unit image zoom preview</DialogTitle>
+          <DialogDescription className="sr-only">
+            Enlarged preview for unit image {safeSelectedUnitImageIndex + 1} of {selectedUnitImages.length || 1}.
+          </DialogDescription>
+
+          {selectedUnitActiveImage ? (
+            <div className="relative">
+              <img
+                src={selectedUnitActiveImage}
+                alt={`Zoomed unit image ${safeSelectedUnitImageIndex + 1}`}
+                className="h-[85vh] w-[95vw] rounded-lg bg-black/90 object-contain"
+              />
+
+              {showSelectedUnitImageControls ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute left-3 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-black/70 text-white hover:bg-black/80"
+                    onClick={showPreviousSelectedUnitImage}
+                    aria-label="Previous unit image"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute right-3 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-black/70 text-white hover:bg-black/80"
+                    onClick={showNextSelectedUnitImage}
+                    aria-label="Next unit image"
                   >
                     <ChevronRight className="h-5 w-5" />
                   </Button>

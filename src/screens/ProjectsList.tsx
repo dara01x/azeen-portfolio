@@ -24,13 +24,13 @@ import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth/useAuth";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import type { AppVariableItem } from "@/modules/app-variables/types";
-import { getProperties as fetchProperties } from "@/modules/properties/property.client";
 import {
   deleteProject as deleteProjectById,
   getProjects as fetchProjects,
   updateProject as updateProjectById,
 } from "@/modules/projects/project.client";
-import type { Project, Property } from "@/types";
+import { getUnits as fetchUnits } from "@/modules/units/unit.client";
+import type { Project, Unit } from "@/types";
 
 type DeleteDialogState = {
   open: boolean;
@@ -84,7 +84,7 @@ const ProjectsList = () => {
   const { user, loading: authLoading } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
 
@@ -152,7 +152,7 @@ const ProjectsList = () => {
 
     if (!user) {
       setProjects([]);
-      setProperties([]);
+      setUnits([]);
       setLoading(false);
       return;
     }
@@ -163,9 +163,9 @@ const ProjectsList = () => {
       try {
         setLoading(true);
         setError("");
-        const [projectsResult, propertiesResult] = await Promise.allSettled([
+        const [projectsResult, unitsResult] = await Promise.allSettled([
           fetchProjects(),
-          fetchProperties(),
+          fetchUnits(),
         ]);
 
         if (!mounted) {
@@ -173,9 +173,9 @@ const ProjectsList = () => {
         }
 
         setProjects(projectsResult.status === "fulfilled" ? (projectsResult.value as Project[]) : []);
-        setProperties(propertiesResult.status === "fulfilled" ? (propertiesResult.value as Property[]) : []);
+        setUnits(unitsResult.status === "fulfilled" ? (unitsResult.value as Unit[]) : []);
 
-        if (projectsResult.status === "rejected" || propertiesResult.status === "rejected") {
+        if (projectsResult.status === "rejected" || unitsResult.status === "rejected") {
           setError("Some project data could not be loaded.");
         }
       } catch (fetchError) {
@@ -202,28 +202,45 @@ const ProjectsList = () => {
   const projectUnitStats = useMemo(() => {
     const statsMap = new Map<string, { total: number; available: number; sold: number }>();
 
-    properties.forEach((property) => {
-      const projectId = property.project_id;
+    units.forEach((unit) => {
+      const projectId = unit.project_id;
       if (!projectId) {
         return;
       }
 
       const current = statsMap.get(projectId) || { total: 0, available: 0, sold: 0 };
-      current.total += 1;
+      const options = unit.properties && unit.properties.length > 0
+        ? unit.properties
+        : [
+            {
+              price: unit.price,
+              currency: unit.currency,
+              interface: [],
+              building_no: undefined,
+              floor_no: undefined,
+              active: unit.status === "available",
+              sold: unit.status === "sold",
+            },
+          ];
 
-      if (property.status === "available") {
-        current.available += 1;
-      }
+      current.total += options.length;
 
-      if (property.status === "sold") {
-        current.sold += 1;
-      }
+      options.forEach((option) => {
+        if (option.sold) {
+          current.sold += 1;
+          return;
+        }
+
+        if (option.active) {
+          current.available += 1;
+        }
+      });
 
       statsMap.set(projectId, current);
     });
 
     return statsMap;
-  }, [properties]);
+  }, [units]);
 
   const getProjectUnitStats = (projectId: string) =>
     projectUnitStats.get(projectId) || { total: 0, available: 0, sold: 0 };

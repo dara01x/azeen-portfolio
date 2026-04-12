@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,11 +21,13 @@ import {
   updateProject,
   uploadProjectImageBlobUrls,
 } from "@/modules/projects/project.client";
-import type { Project, User } from "@/types";
+import { createUnit, deleteUnit as deleteUnitById, getUnits, updateUnit } from "@/modules/units/unit.client";
+import type { Project, Unit, UnitOption, User } from "@/types";
 
 type LocalImageFileMap = Record<string, File>;
 
 const OPTIONAL_LINK_NONE = "__none__";
+const DIRECTION_OPTIONS = ["north", "east", "south", "west"];
 
 const PROJECT_STATUS_OPTIONS: Array<{ value: Project["status"]; label: string }> = [
   { value: "active", label: "Active" },
@@ -72,6 +74,130 @@ function getPreferredText(...values: Array<string | undefined>) {
 
 function isProjectStatus(value: string): value is Project["status"] {
   return value === "active" || value === "completed" || value === "archived";
+}
+
+function createDefaultUnitOption(): UnitOption {
+  return {
+    price: 0,
+    currency: "USD",
+    interface: [],
+    building_no: "",
+    floor_no: "",
+    active: true,
+    sold: false,
+  };
+}
+
+function createDefaultUnitDraft(projectId: string): Omit<Unit, "id"> {
+  return {
+    unit_code: "",
+    project_id: projectId,
+    unit_number: "",
+    title: "",
+    status: "available",
+    price: 0,
+    currency: "USD",
+    payment_type: "cash",
+    type_id: "",
+    area_size: 0,
+    bedrooms: 0,
+    suit_rooms: 0,
+    bathrooms: 0,
+    balconies: 0,
+    floor_number: undefined,
+    features: {
+      bedrooms: 0,
+      bathrooms: 0,
+      suit_rooms: 0,
+      balconies: 0,
+    },
+    properties: [createDefaultUnitOption()],
+    images: [],
+    main_image: undefined,
+    assigned_company_id: undefined,
+    internal_notes: "",
+  };
+}
+
+function normalizeUnitOptions(options: UnitOption[]): UnitOption[] {
+  return options.map((option) => {
+    const normalizedInterface = Array.from(
+      new Set(
+        (option.interface || [])
+          .map((item) => item.trim().toLowerCase())
+          .filter((item) => DIRECTION_OPTIONS.includes(item)),
+      ),
+    );
+
+    const isSold = option.sold === true;
+
+    return {
+      price: Number(option.price) >= 0 ? Number(option.price) : 0,
+      currency: option.currency === "IQD" ? "IQD" : "USD",
+      interface: normalizedInterface,
+      building_no: (option.building_no || "").trim() || undefined,
+      floor_no: (option.floor_no || "").trim() || undefined,
+      active: isSold ? false : option.active !== false,
+      sold: isSold,
+    };
+  });
+}
+
+function deriveUnitStatusFromOptions(options: UnitOption[]): Unit["status"] {
+  const hasAvailable = options.some((option) => option.active && !option.sold);
+  const hasSold = options.some((option) => option.sold);
+
+  if (hasAvailable) {
+    return "available";
+  }
+
+  if (hasSold && options.every((option) => option.sold)) {
+    return "sold";
+  }
+
+  if (hasSold) {
+    return "available";
+  }
+
+  return "archived";
+}
+
+function inferFloorNumberFromOptions(options: UnitOption[]): number | undefined {
+  for (const option of options) {
+    const value = Number(option.floor_no);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function getUnitTypeName(typeId: string | undefined, types: AppVariableItem[]) {
+  if (!typeId) {
+    return "No type";
+  }
+
+  return types.find((item) => item.id === typeId)?.name || typeId;
+}
+
+function getUnitPriceRangeLabel(unit: Unit) {
+  const options = normalizeUnitOptions(unit.properties || []);
+
+  if (options.length === 0) {
+    return `${unit.price || 0} ${unit.currency || "USD"}`;
+  }
+
+  const prices = options.map((option) => option.price).filter((price) => Number.isFinite(price));
+  if (prices.length === 0) {
+    return `0 ${options[0]?.currency || "USD"}`;
+  }
+
+  const minimum = Math.min(...prices);
+  const maximum = Math.max(...prices);
+  const currency = options[0]?.currency || "USD";
+
+  return minimum === maximum ? `${minimum} ${currency}` : `${minimum} - ${maximum} ${currency}`;
 }
 
 const defaultProject: Omit<Project, "id"> = {
@@ -136,6 +262,15 @@ const ProjectForm = () => {
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(false);
+  const [unitsError, setUnitsError] = useState<string | null>(null);
+  const [unitDraft, setUnitDraft] = useState<Omit<Unit, "id">>(createDefaultUnitDraft(id || ""));
+  const [unitEditorOpen, setUnitEditorOpen] = useState(false);
+  const [unitEditingId, setUnitEditingId] = useState<string | null>(null);
+  const [unitSaving, setUnitSaving] = useState(false);
+  const [unitDeletingId, setUnitDeletingId] = useState<string | null>(null);
+  const [unitError, setUnitError] = useState<string | null>(null);
 
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -271,6 +406,290 @@ const ProjectForm = () => {
       cancelled = true;
     };
   }, [authLoading, id, isEdit, user]);
+
+  useEffect(() => {
+    if (!isEdit || !id) {
+      setUnits([]);
+      setUnitsLoading(false);
+      setUnitsError(null);
+      setUnitEditorOpen(false);
+      setUnitEditingId(null);
+      setUnitDraft(createDefaultUnitDraft(""));
+      return;
+    }
+
+    setUnitDraft((prev) => ({
+      ...prev,
+      project_id: id,
+    }));
+  }, [id, isEdit]);
+
+  useEffect(() => {
+    if (!isEdit) {
+      return;
+    }
+
+    if (authLoading || !user || !id) {
+      return;
+    }
+
+    let cancelled = false;
+    setUnitsLoading(true);
+    setUnitsError(null);
+
+    getUnits()
+      .then((items) => {
+        if (cancelled) {
+          return;
+        }
+
+        const scopedUnits = (items as Unit[]).filter((item) => item.project_id === id);
+        setUnits(scopedUnits);
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          const message = loadError instanceof Error ? loadError.message : "Failed to load units.";
+          setUnitsError(message);
+          setUnits([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setUnitsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, id, isEdit, user]);
+
+  const openCreateUnitEditor = () => {
+    if (!id) {
+      return;
+    }
+
+    setUnitEditingId(null);
+    setUnitError(null);
+    setUnitDraft(createDefaultUnitDraft(id));
+    setUnitEditorOpen(true);
+  };
+
+  const openEditUnitEditor = (unit: Unit) => {
+    const normalizedOptions = normalizeUnitOptions(
+      unit.properties && unit.properties.length > 0
+        ? unit.properties
+        : [
+            {
+              price: Number(unit.price) || 0,
+              currency: unit.currency === "IQD" ? "IQD" : "USD",
+              interface: [],
+              building_no: "",
+              floor_no: unit.floor_number !== undefined ? String(unit.floor_number) : "",
+              active: unit.status !== "sold",
+              sold: unit.status === "sold",
+            },
+          ],
+    );
+
+    const features = {
+      bedrooms: Number(unit.features?.bedrooms ?? unit.bedrooms ?? 0),
+      bathrooms: Number(unit.features?.bathrooms ?? unit.bathrooms ?? 0),
+      suit_rooms: Number(unit.features?.suit_rooms ?? unit.suit_rooms ?? 0),
+      balconies: Number(unit.features?.balconies ?? unit.balconies ?? 0),
+    };
+
+    const { id: _unitId, ...rest } = unit;
+    setUnitDraft({
+      ...createDefaultUnitDraft(unit.project_id),
+      ...rest,
+      project_id: unit.project_id,
+      unit_number: unit.unit_number || "",
+      features,
+      bedrooms: features.bedrooms,
+      bathrooms: features.bathrooms,
+      suit_rooms: features.suit_rooms,
+      balconies: features.balconies,
+      properties: normalizedOptions,
+      internal_notes: unit.internal_notes || "",
+      images: unit.images || [],
+      main_image: unit.main_image,
+    });
+    setUnitEditingId(unit.id);
+    setUnitError(null);
+    setUnitEditorOpen(true);
+  };
+
+  const closeUnitEditor = () => {
+    setUnitEditorOpen(false);
+    setUnitEditingId(null);
+    setUnitError(null);
+    setUnitDraft(createDefaultUnitDraft(id || ""));
+  };
+
+  const updateUnitDraft = <K extends keyof Omit<Unit, "id">>(key: K, value: Omit<Unit, "id">[K]) => {
+    setUnitDraft((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const patchUnitOption = (index: number, patch: Partial<UnitOption>) => {
+    setUnitDraft((prev) => {
+      const nextOptions = [...(prev.properties || [])];
+      const current = nextOptions[index] || createDefaultUnitOption();
+      nextOptions[index] = {
+        ...current,
+        ...patch,
+      };
+
+      return {
+        ...prev,
+        properties: nextOptions,
+      };
+    });
+  };
+
+  const addUnitOption = () => {
+    setUnitDraft((prev) => ({
+      ...prev,
+      properties: [...(prev.properties || []), createDefaultUnitOption()],
+    }));
+  };
+
+  const removeUnitOption = (index: number) => {
+    setUnitDraft((prev) => {
+      if ((prev.properties || []).length <= 1) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        properties: prev.properties.filter((_, optionIndex) => optionIndex !== index),
+      };
+    });
+  };
+
+  const toggleUnitOptionDirection = (index: number, direction: string) => {
+    setUnitDraft((prev) => {
+      const nextOptions = [...(prev.properties || [])];
+      const current = nextOptions[index] || createDefaultUnitOption();
+      const hasDirection = current.interface.includes(direction);
+
+      nextOptions[index] = {
+        ...current,
+        interface: hasDirection
+          ? current.interface.filter((item) => item !== direction)
+          : [...current.interface, direction],
+      };
+
+      return {
+        ...prev,
+        properties: nextOptions,
+      };
+    });
+  };
+
+  async function handleSaveUnit() {
+    if (authLoading || !user || !isEdit || !id) {
+      return;
+    }
+
+    setUnitSaving(true);
+    setUnitError(null);
+
+    try {
+      const normalizedOptions = normalizeUnitOptions(unitDraft.properties || []);
+      if (normalizedOptions.length === 0) {
+        throw new Error("At least one unit option is required.");
+      }
+
+      const typeId = (unitDraft.type_id || "").trim();
+      if (!typeId) {
+        throw new Error("Unit type is required.");
+      }
+
+      const areaSize = Number(unitDraft.area_size) || 0;
+      if (areaSize <= 0) {
+        throw new Error("Unit area must be greater than zero.");
+      }
+
+      const features = {
+        bedrooms: Math.max(0, Number(unitDraft.features?.bedrooms ?? unitDraft.bedrooms ?? 0) || 0),
+        bathrooms: Math.max(0, Number(unitDraft.features?.bathrooms ?? unitDraft.bathrooms ?? 0) || 0),
+        suit_rooms: Math.max(0, Number(unitDraft.features?.suit_rooms ?? unitDraft.suit_rooms ?? 0) || 0),
+        balconies: Math.max(0, Number(unitDraft.features?.balconies ?? unitDraft.balconies ?? 0) || 0),
+      };
+
+      const primaryOption = normalizedOptions[0];
+      const title = (unitDraft.title || "").trim() || getUnitTypeName(typeId, propertyTypes);
+
+      const payload: Omit<Unit, "id"> = {
+        ...unitDraft,
+        project_id: id,
+        title,
+        unit_number: (unitDraft.unit_number || "").trim() || undefined,
+        status: deriveUnitStatusFromOptions(normalizedOptions),
+        type_id: typeId,
+        area_size: areaSize,
+        payment_type: unitDraft.payment_type === "installment" ? "installment" : "cash",
+        price: primaryOption.price,
+        currency: primaryOption.currency,
+        floor_number: inferFloorNumberFromOptions(normalizedOptions),
+        features,
+        bedrooms: features.bedrooms,
+        bathrooms: features.bathrooms,
+        suit_rooms: features.suit_rooms,
+        balconies: features.balconies,
+        properties: normalizedOptions,
+        images: unitDraft.images || [],
+        main_image: unitDraft.main_image || unitDraft.images?.[0] || undefined,
+        internal_notes: (unitDraft.internal_notes || "").trim() || undefined,
+      };
+
+      if (unitEditingId) {
+        const updated = await updateUnit(unitEditingId, payload);
+        setUnits((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      } else {
+        const created = await createUnit(payload);
+        setUnits((prev) => [created, ...prev]);
+      }
+
+      closeUnitEditor();
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Failed to save unit.";
+      setUnitError(message);
+    } finally {
+      setUnitSaving(false);
+    }
+  }
+
+  async function handleDeleteUnit(unitId: string) {
+    if (authLoading || !user) {
+      return;
+    }
+
+    if (!window.confirm("Delete this unit? This action cannot be undone.")) {
+      return;
+    }
+
+    setUnitDeletingId(unitId);
+    setUnitError(null);
+
+    try {
+      await deleteUnitById(unitId);
+      setUnits((prev) => prev.filter((item) => item.id !== unitId));
+
+      if (unitEditingId === unitId) {
+        closeUnitEditor();
+      }
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete unit.";
+      setUnitError(message);
+    } finally {
+      setUnitDeletingId(null);
+    }
+  }
 
   async function handleSubmit() {
     if (authLoading || !user) {
@@ -618,6 +1037,362 @@ const ProjectForm = () => {
                 </SelectContent>
               </Select>
             </div>
+          </FormSection>
+
+          <FormSection
+            title="Project Units"
+            description="Create and manage units for this project from the same page"
+          >
+            {!isEdit ? (
+              <p className="text-sm text-muted-foreground">Save the project first, then you can add units.</p>
+            ) : (
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm text-muted-foreground">Units in this project: {units.length}</p>
+                  <Button type="button" size="sm" className="gap-2" onClick={openCreateUnitEditor}>
+                    <Plus className="h-4 w-4" />
+                    Add Unit
+                  </Button>
+                </div>
+
+                {unitsError ? <p className="text-sm text-destructive">{unitsError}</p> : null}
+
+                {unitsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading units...</p>
+                ) : units.length === 0 ? (
+                  <p className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
+                    No units have been added for this project yet.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {units.map((unit) => {
+                      const optionCount = unit.properties?.length || 0;
+
+                      return (
+                        <div
+                          key={unit.id}
+                          className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">{unit.title || getUnitTypeName(unit.type_id, propertyTypes)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {getUnitTypeName(unit.type_id, propertyTypes)} • {optionCount} option
+                              {optionCount === 1 ? "" : "s"} • {getUnitPriceRangeLabel(unit)}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border px-2.5 py-1 text-[11px] font-medium capitalize">
+                              {unit.status}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                              onClick={() => openEditUnitEditor(unit)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-destructive hover:text-destructive"
+                              onClick={() => void handleDeleteUnit(unit.id)}
+                              disabled={unitDeletingId === unit.id}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {unitDeletingId === unit.id ? "Deleting..." : "Delete"}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {unitEditorOpen ? (
+                  <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-semibold">{unitEditingId ? "Edit Unit" : "Add Unit"}</h3>
+                      <Button type="button" variant="ghost" size="sm" onClick={closeUnitEditor}>
+                        Close
+                      </Button>
+                    </div>
+
+                    {unitError ? <p className="text-sm text-destructive">{unitError}</p> : null}
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>Unit Title (Optional)</Label>
+                        <Input
+                          value={unitDraft.title}
+                          onChange={(e) => updateUnitDraft("title", e.target.value)}
+                          placeholder="Apartment A"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Unit Type *</Label>
+                        <Select
+                          value={unitDraft.type_id || OPTIONAL_LINK_NONE}
+                          onValueChange={(value) =>
+                            updateUnitDraft("type_id", value === OPTIONAL_LINK_NONE ? undefined : value)
+                          }
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select unit type" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={OPTIONAL_LINK_NONE}>Select type</SelectItem>
+                            {!hasOptionById(propertyTypes, unitDraft.type_id) && unitDraft.type_id ? (
+                              <SelectItem value={unitDraft.type_id}>Current: {unitDraft.type_id}</SelectItem>
+                            ) : null}
+                            {propertyTypes.map((typeItem) => (
+                              <SelectItem key={typeItem.id} value={typeItem.id}>{typeItem.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Area Size *</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={unitDraft.area_size || ""}
+                          onChange={(e) => updateUnitDraft("area_size", Number(e.target.value) || 0)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Payment Type</Label>
+                        <Select
+                          value={unitDraft.payment_type}
+                          onValueChange={(value) =>
+                            updateUnitDraft(
+                              "payment_type",
+                              value === "installment" ? "installment" : "cash",
+                            )
+                          }
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="installment">Installment</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Unit Number (Optional)</Label>
+                        <Input
+                          value={unitDraft.unit_number || ""}
+                          onChange={(e) => updateUnitDraft("unit_number", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label className="mb-2 block">Features</Label>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Bedrooms</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={unitDraft.features.bedrooms || ""}
+                              onChange={(e) =>
+                                updateUnitDraft("features", {
+                                  ...unitDraft.features,
+                                  bedrooms: Math.max(0, Number(e.target.value) || 0),
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Suit Rooms</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={unitDraft.features.suit_rooms || ""}
+                              onChange={(e) =>
+                                updateUnitDraft("features", {
+                                  ...unitDraft.features,
+                                  suit_rooms: Math.max(0, Number(e.target.value) || 0),
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Bathrooms</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={unitDraft.features.bathrooms || ""}
+                              onChange={(e) =>
+                                updateUnitDraft("features", {
+                                  ...unitDraft.features,
+                                  bathrooms: Math.max(0, Number(e.target.value) || 0),
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Balconies</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={unitDraft.features.balconies || ""}
+                              onChange={(e) =>
+                                updateUnitDraft("features", {
+                                  ...unitDraft.features,
+                                  balconies: Math.max(0, Number(e.target.value) || 0),
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 sm:col-span-2">
+                        <div className="flex items-center justify-between">
+                          <Label>Unit Options *</Label>
+                          <Button type="button" variant="outline" size="sm" onClick={addUnitOption}>Add Option</Button>
+                        </div>
+
+                        {unitDraft.properties.map((option, index) => (
+                          <div key={`option-${index}`} className="space-y-3 rounded-lg border p-3">
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Price</Label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={option.price || ""}
+                                  onChange={(e) =>
+                                    patchUnitOption(index, {
+                                      price: Math.max(0, Number(e.target.value) || 0),
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Currency</Label>
+                                <Select
+                                  value={option.currency}
+                                  onValueChange={(value) =>
+                                    patchUnitOption(index, {
+                                      currency: value === "IQD" ? "IQD" : "USD",
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="USD">USD</SelectItem>
+                                    <SelectItem value="IQD">IQD</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Building No.</Label>
+                                <Input
+                                  value={option.building_no || ""}
+                                  onChange={(e) => patchUnitOption(index, { building_no: e.target.value })}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Floor No.</Label>
+                                <Input
+                                  value={option.floor_no || ""}
+                                  onChange={(e) => patchUnitOption(index, { floor_no: e.target.value })}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-4">
+                              <label className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={option.active}
+                                  onCheckedChange={(checked) =>
+                                    patchUnitOption(index, {
+                                      active: checked === true,
+                                      sold: checked === true ? false : option.sold,
+                                    })
+                                  }
+                                />
+                                Active
+                              </label>
+                              <label className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={option.sold}
+                                  onCheckedChange={(checked) =>
+                                    patchUnitOption(index, {
+                                      sold: checked === true,
+                                      active: checked === true ? false : option.active,
+                                    })
+                                  }
+                                />
+                                Sold
+                              </label>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="text-xs">Interface (Directions)</Label>
+                              <div className="flex flex-wrap gap-2">
+                                {DIRECTION_OPTIONS.map((direction) => (
+                                  <Button
+                                    key={`${index}-${direction}`}
+                                    type="button"
+                                    variant={option.interface.includes(direction) ? "default" : "outline"}
+                                    size="sm"
+                                    className="capitalize"
+                                    onClick={() => toggleUnitOptionDirection(index, direction)}
+                                  >
+                                    {direction}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => removeUnitOption(index)}
+                                disabled={unitDraft.properties.length <= 1}
+                              >
+                                Remove Option
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>Unit Notes (Optional)</Label>
+                        <Textarea
+                          value={unitDraft.internal_notes || ""}
+                          onChange={(e) => updateUnitDraft("internal_notes", e.target.value)}
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" onClick={closeUnitEditor}>Cancel</Button>
+                      <Button type="button" onClick={() => void handleSaveUnit()} disabled={unitSaving}>
+                        {unitSaving ? "Saving..." : unitEditingId ? "Update Unit" : "Create Unit"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {unitError && !unitEditorOpen ? <p className="text-sm text-destructive">{unitError}</p> : null}
+              </div>
+            )}
           </FormSection>
 
           <FormSection title="Internal Notes">

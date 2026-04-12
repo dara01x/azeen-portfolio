@@ -134,3 +134,46 @@ export interface Project {
   assigned_company_id?: string;
   internal_notes?: string;
 }
+
+// Units
+export interface UnitFeatures {
+  bedrooms: number;
+  bathrooms: number;
+  suit_rooms: number;
+  balconies: number;
+}
+
+export interface UnitOption {
+  price: number;
+  currency: "USD" | "IQD";
+  interface: string[];
+  building_no?: string;
+  floor_no?: string;
+  active: boolean;
+  sold: boolean;
+}
+
+export interface Unit {
+  id: string;
+  unit_code?: string;
+  project_id: string;
+  unit_number?: string;
+  title: string;
+  status: "available" | "sold" | "archived";
+  price: number;
+  currency: "USD" | "IQD";
+  payment_type: "cash" | "installment";
+  type_id?: string;
+  area_size: number;
+  bedrooms: number;
+  suit_rooms: number;
+  bathrooms: number;
+  balconies: number;
+  floor_number?: number;
+  features: UnitFeatures;
+  properties: UnitOption[];
+  images: string[];
+  main_image?: string;
+  assigned_company_id?: string;
+  internal_notes?: string;
+}
