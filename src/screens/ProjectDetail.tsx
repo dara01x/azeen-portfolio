@@ -10,10 +10,11 @@ import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getProjectById } from "@/modules/projects/project.client";
 import { getUnits } from "@/modules/units/unit.client";
+import { getUsers } from "@/modules/users/user.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import type { AppVariableItem } from "@/modules/app-variables/types";
 import { useAuth } from "@/lib/auth/useAuth";
-import type { Project, Unit, UnitOption } from "@/types";
+import type { Project, Unit, UnitOption, User } from "@/types";
 
 const Field = ({ label, value }: { label: string; value: string | number }) => (
   <div className="space-y-0.5">
@@ -131,6 +132,7 @@ const ProjectDetail = () => {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(true);
   const [unitsError, setUnitsError] = useState<string | null>(null);
@@ -216,14 +218,15 @@ const ProjectDetail = () => {
     let cancelled = false;
     setLookupError(null);
 
-    Promise.all([getVariables("property_types"), getVariables("cities")])
-      .then(([types, citiesList]) => {
+    Promise.all([getVariables("property_types"), getVariables("cities"), getUsers().catch(() => [])])
+      .then(([types, citiesList, userItems]) => {
         if (cancelled) {
           return;
         }
 
         setPropertyTypes(types);
         setCities(citiesList);
+        setUsers(Array.isArray(userItems) ? (userItems as User[]) : []);
       })
       .catch((fetchError) => {
         if (!cancelled) {
@@ -304,7 +307,26 @@ const ProjectDetail = () => {
   );
   const notesLabel = firstNonEmpty(project.internal_notes);
   const videoUrl = firstNonEmpty(project.video_url);
-  const assignedCompanyLabel = firstNonEmpty(project.assigned_company_id);
+  const assignedCompany = project.assigned_company_id
+    ? users.find((item) => item.id === project.assigned_company_id && item.role === "company")
+    : undefined;
+  const relationItems = [
+    firstNonEmpty(assignedCompany?.company_name, assignedCompany?.full_name)
+      ? { label: "Company", value: firstNonEmpty(assignedCompany?.company_name, assignedCompany?.full_name) }
+      : null,
+    firstNonEmpty(project.assigned_company_id)
+      ? { label: "Company ID", value: firstNonEmpty(project.assigned_company_id) }
+      : null,
+    firstNonEmpty(assignedCompany?.email)
+      ? { label: "Email", value: firstNonEmpty(assignedCompany?.email) }
+      : null,
+    firstNonEmpty(assignedCompany?.company_phone, assignedCompany?.phone)
+      ? { label: "Phone", value: firstNonEmpty(assignedCompany?.company_phone, assignedCompany?.phone) }
+      : null,
+    firstNonEmpty(assignedCompany?.company_address)
+      ? { label: "Address", value: firstNonEmpty(assignedCompany?.company_address) }
+      : null,
+  ].filter((item): item is { label: string; value: string } => item !== null);
 
   const images = project.images.length > 0 ? project.images : project.main_image ? [project.main_image] : [];
   const hasImages = images.length > 0;
@@ -341,23 +363,14 @@ const ProjectDetail = () => {
     addressLabel ? { label: "Address", value: addressLabel } : null,
   ].filter((item): item is { label: string; value: string } => item !== null);
 
-  const overviewItems = [
-    { label: "Project ID", value: projectCode },
-    statusLabel ? { label: "Status", value: statusLabel } : null,
-    cityLabel ? { label: "City", value: cityLabel } : null,
-    areaLabel ? { label: "Area", value: areaLabel } : null,
-    addressLabel ? { label: "Address", value: addressLabel } : null,
-  ].filter((item): item is { label: string; value: string } => item !== null);
-
   const showLocationCard = locationItems.length > 0;
   const showDescriptionCard = !!descriptionLabel;
   const showNotesCard = !!notesLabel;
-  const showOverviewCard = overviewItems.length > 0;
   const showTypesCard = typeNames.length > 0;
   const showVideoCard = !!videoUrl;
-  const showRelationsCard = !!assignedCompanyLabel;
+  const showRelationsCard = relationItems.length > 0;
   const showLeftColumn = showLocationCard || showDescriptionCard || showNotesCard;
-  const showRightColumn = showOverviewCard || showTypesCard || showVideoCard || showRelationsCard;
+  const showRightColumn = showTypesCard || showVideoCard || showRelationsCard;
   const getUnitTypeLabel = (typeId?: string) => (typeId ? findVariableName(propertyTypes, typeId) : "No type");
   const closeUnitView = () => {
     setIsUnitImageZoomOpen(false);
@@ -479,9 +492,9 @@ const ProjectDetail = () => {
 
           <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-6 h-fit">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">PROJECT CODE</p>
-              <p className="text-3xl font-bold text-slate-900 mt-1">{projectCode}</p>
-              <p className="text-sm text-slate-500 mt-1">{project.title}</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">PROJECT NAME</p>
+              <p className="text-3xl font-bold text-slate-900 mt-1">{project.title}</p>
+              <p className="text-sm text-slate-500 mt-1">{projectCode}</p>
             </div>
 
             {summaryItems.length > 0 ? (
@@ -554,19 +567,6 @@ const ProjectDetail = () => {
 
             {showRightColumn ? (
               <div className="space-y-6">
-                {showOverviewCard ? (
-                  <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-                    <CardContent className="p-5">
-                      <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Overview</p>
-                      <div className={`grid ${overviewItems.length > 1 ? "grid-cols-2" : "grid-cols-1"} gap-4`}>
-                        {overviewItems.map((item) => (
-                          <Field key={item.label} label={item.label} value={item.value} />
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : null}
-
                 {showTypesCard ? (
                   <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
                     <CardContent className="p-5 space-y-4">
@@ -611,11 +611,13 @@ const ProjectDetail = () => {
                 {showRelationsCard ? (
                   <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
                     <CardContent className="p-5">
-                      <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-2">Relations</p>
-                      <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-                        <span className="text-xs text-slate-400 uppercase">Assigned Company</span>
-                        <span className="text-sm font-medium font-mono text-slate-700">{assignedCompanyLabel}</span>
-                      </div>
+                      <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-2">Assigned Company</p>
+                      {relationItems.map((item) => (
+                        <div key={item.label} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                          <span className="text-xs text-slate-400 uppercase">{item.label}</span>
+                          <span className="text-sm font-medium text-slate-700 text-right break-all">{item.value}</span>
+                        </div>
+                      ))}
                     </CardContent>
                   </Card>
                 ) : null}

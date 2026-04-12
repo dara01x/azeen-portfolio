@@ -27,7 +27,6 @@ import type { AppVariableItem } from "@/modules/app-variables/types";
 import {
   deleteProject as deleteProjectById,
   getProjects as fetchProjects,
-  updateProject as updateProjectById,
 } from "@/modules/projects/project.client";
 import { getUnits as fetchUnits } from "@/modules/units/unit.client";
 import type { Project, Unit } from "@/types";
@@ -39,45 +38,6 @@ type DeleteDialogState = {
 };
 
 const PROJECTS_PAGE_SIZE = 10;
-
-const STATUS_META: Record<
-  Project["status"],
-  { label: string; dotClassName: string; triggerClassName: string }
-> = {
-  active: {
-    label: "Active",
-    dotClassName: "bg-emerald-500",
-    triggerClassName: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  },
-  completed: {
-    label: "Completed",
-    dotClassName: "bg-blue-500",
-    triggerClassName: "bg-blue-50 text-blue-800 border-blue-200",
-  },
-  archived: {
-    label: "Archived",
-    dotClassName: "bg-slate-500",
-    triggerClassName: "bg-slate-100 text-slate-700 border-slate-200",
-  },
-};
-
-function parseFilterNumber(value: string) {
-  const normalized = value.replace(/[,_\s]/g, "").trim();
-  if (!normalized) {
-    return null;
-  }
-
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed)) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function isProjectStatus(value: string): value is Project["status"] {
-  return value === "active" || value === "completed" || value === "archived";
-}
 
 const ProjectsList = () => {
   const router = useRouter();
@@ -94,17 +54,11 @@ const ProjectsList = () => {
 
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [hasUnitsFilter, setHasUnitsFilter] = useState("all");
-  const [minAreaFilter, setMinAreaFilter] = useState("");
-  const [minPriceFilter, setMinPriceFilter] = useState("");
-  const [maxPriceFilter, setMaxPriceFilter] = useState("");
+  const [areaFilter, setAreaFilter] = useState("all");
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingProjectIds, setDeletingProjectIds] = useState<string[]>([]);
-  const [statusUpdatingProjectIds, setStatusUpdatingProjectIds] = useState<string[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
     open: false,
@@ -126,23 +80,20 @@ const ProjectsList = () => {
     return project.property_type_ids.map(getPropertyTypeName).join(", ");
   };
 
+  const areaOptions = useMemo(
+    () =>
+      Array.from(new Set(projects.map((project) => project.area.trim()).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [projects],
+  );
+
   const hasActiveFilters =
-    cityFilter !== "all" ||
-    typeFilter !== "all" ||
-    statusFilter !== "all" ||
-    hasUnitsFilter !== "all" ||
-    minAreaFilter.trim() !== "" ||
-    minPriceFilter.trim() !== "" ||
-    maxPriceFilter.trim() !== "";
+    cityFilter !== "all" || areaFilter !== "all";
 
   const resetFilters = () => {
     setCityFilter("all");
-    setTypeFilter("all");
-    setStatusFilter("all");
-    setHasUnitsFilter("all");
-    setMinAreaFilter("");
-    setMinPriceFilter("");
-    setMaxPriceFilter("");
+    setAreaFilter("all");
   };
 
   useEffect(() => {
@@ -279,17 +230,12 @@ const ProjectsList = () => {
   const filtered = projects.filter((project) => {
     if (search) {
       const term = search.toLowerCase();
-      const typeNames = (project.property_type_ids || []).map(getPropertyTypeName).join(" ").toLowerCase();
-      const typeIds = (project.property_type_ids || []).join(" ").toLowerCase();
 
       const matchesTitle = project.title.toLowerCase().includes(term);
       const matchesId =
         getProjectCode(project).toLowerCase().includes(term) || project.id.toLowerCase().includes(term);
-      const matchesCity =
-        getCityName(project.city_id).toLowerCase().includes(term) || project.city_id.toLowerCase().includes(term);
-      const matchesType = typeNames.includes(term) || typeIds.includes(term);
 
-      if (!matchesTitle && !matchesId && !matchesCity && !matchesType) {
+      if (!matchesTitle && !matchesId) {
         return false;
       }
     }
@@ -298,36 +244,7 @@ const ProjectsList = () => {
       return false;
     }
 
-    if (typeFilter !== "all" && !(project.property_type_ids || []).includes(typeFilter)) {
-      return false;
-    }
-
-    if (statusFilter !== "all" && project.status !== statusFilter) {
-      return false;
-    }
-
-    const unitStats = getProjectUnitStats(project.id);
-
-    if (hasUnitsFilter === "yes" && unitStats.total === 0) {
-      return false;
-    }
-
-    if (hasUnitsFilter === "no" && unitStats.total > 0) {
-      return false;
-    }
-
-    const minArea = parseFilterNumber(minAreaFilter);
-    if (minArea != null && project.area_size < minArea) {
-      return false;
-    }
-
-    const minPrice = parseFilterNumber(minPriceFilter);
-    if (minPrice != null && project.starting_price < minPrice) {
-      return false;
-    }
-
-    const maxPrice = parseFilterNumber(maxPriceFilter);
-    if (maxPrice != null && project.starting_price > maxPrice) {
+    if (areaFilter !== "all" && project.area !== areaFilter) {
       return false;
     }
 
@@ -339,12 +256,7 @@ const ProjectsList = () => {
   }, [
     search,
     cityFilter,
-    typeFilter,
-    statusFilter,
-    hasUnitsFilter,
-    minAreaFilter,
-    minPriceFilter,
-    maxPriceFilter,
+    areaFilter,
   ]);
 
   useEffect(() => {
@@ -371,7 +283,6 @@ const ProjectsList = () => {
   const visibleProjectIds = paginatedProjects.map((project) => project.id);
   const visibleProjectIdSet = new Set(visibleProjectIds);
   const deletingIdSet = new Set(deletingProjectIds);
-  const statusUpdatingIdSet = new Set(statusUpdatingProjectIds);
   const allVisibleSelected =
     visibleProjectIds.length > 0 && visibleProjectIds.every((id) => selectedIdSet.has(id));
   const someVisibleSelected =
@@ -424,14 +335,6 @@ const ProjectsList = () => {
   const unmarkDeletingIds = (ids: string[]) => {
     const idsToRemove = new Set(ids);
     setDeletingProjectIds((current) => current.filter((id) => !idsToRemove.has(id)));
-  };
-
-  const markStatusUpdatingId = (id: string) => {
-    setStatusUpdatingProjectIds((current) => (current.includes(id) ? current : [...current, id]));
-  };
-
-  const unmarkStatusUpdatingId = (id: string) => {
-    setStatusUpdatingProjectIds((current) => current.filter((currentId) => currentId !== id));
   };
 
   const closeDeleteDialog = () => {
@@ -537,51 +440,6 @@ const ProjectsList = () => {
     closeDeleteDialog();
   }
 
-  async function handleProjectStatusChange(project: Project, nextStatusValue: string) {
-    if (!isProjectStatus(nextStatusValue)) {
-      return;
-    }
-
-    if (deletingIdSet.has(project.id) || statusUpdatingIdSet.has(project.id) || project.status === nextStatusValue) {
-      return;
-    }
-
-    const previousStatus = project.status;
-    markStatusUpdatingId(project.id);
-    setError("");
-
-    setProjects((current) =>
-      current.map((item) => (item.id === project.id ? { ...item, status: nextStatusValue } : item)),
-    );
-
-    try {
-      const { id: _id, ...projectPayload } = project;
-      const updated = await updateProjectById(project.id, {
-        ...projectPayload,
-        status: nextStatusValue,
-      });
-
-      setProjects((current) => current.map((item) => (item.id === project.id ? updated : item)));
-      toast.success("Project status updated.");
-    } catch (updateError) {
-      setProjects((current) =>
-        current.map((item) => (item.id === project.id ? { ...item, status: previousStatus } : item)),
-      );
-
-      const message = updateError instanceof Error ? updateError.message : "Failed to update project status.";
-      setError(message);
-      toast.error(message, {
-        style: {
-          background: "hsl(var(--destructive))",
-          color: "hsl(var(--destructive-foreground))",
-          borderColor: "hsl(var(--destructive))",
-        },
-      });
-    } finally {
-      unmarkStatusUpdatingId(project.id);
-    }
-  }
-
   return (
     <div>
       <PageHeader
@@ -601,7 +459,7 @@ const ProjectsList = () => {
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by ID, type, or city..."
+              placeholder="SEARCH BY ID OR NAME OF THE PROJECT"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="pl-9 h-9 bg-muted/50 border-0"
@@ -651,75 +509,16 @@ const ProjectsList = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Property Type</p>
-                  <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Property Type" /></SelectTrigger>
+                  <p className="text-xs font-medium text-muted-foreground">Area</p>
+                  <Select value={areaFilter} onValueChange={setAreaFilter}>
+                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Area" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Property Types</SelectItem>
-                      {propertyTypes.map((typeItem) => (
-                        <SelectItem key={typeItem.id} value={typeItem.id}>{typeItem.name}</SelectItem>
+                      <SelectItem value="all">All Areas</SelectItem>
+                      {areaOptions.map((areaName) => (
+                        <SelectItem key={areaName} value={areaName}>{areaName}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Status</p>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Status" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Has Units</p>
-                  <Select value={hasUnitsFilter} onValueChange={setHasUnitsFilter}>
-                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Has Units" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="yes">Yes</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Min Area (m2)</p>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="Min"
-                    value={minAreaFilter}
-                    onChange={(event) => setMinAreaFilter(event.target.value)}
-                    className="h-9 bg-muted/50 border-0"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Starting Price Range</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="Min"
-                      value={minPriceFilter}
-                      onChange={(event) => setMinPriceFilter(event.target.value)}
-                      className="h-9 bg-muted/50 border-0"
-                    />
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="Max"
-                      value={maxPriceFilter}
-                      onChange={(event) => setMaxPriceFilter(event.target.value)}
-                      className="h-9 bg-muted/50 border-0"
-                    />
-                  </div>
                 </div>
               </div>
             </PopoverContent>
@@ -796,7 +595,6 @@ const ProjectsList = () => {
 
             <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
               {paginatedProjects.map((project) => {
-                const statusMeta = STATUS_META[project.status];
                 const unitStats = getProjectUnitStats(project.id);
 
                 return (
@@ -833,48 +631,17 @@ const ProjectsList = () => {
                     </div>
 
                     <div className="space-y-3 p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold">{project.title}</p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {getProjectTypeLabel(project)} • {getCityName(project.city_id)}
-                          </p>
-                        </div>
-                        <p className="whitespace-nowrap text-sm font-semibold">
-                          {project.currency} {project.starting_price.toLocaleString()}
+                      <div className="min-w-0">
+                        <p className="truncate text-lg font-bold">{project.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {getProjectTypeLabel(project)} • {getCityName(project.city_id)}
                         </p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span className="rounded-md border bg-muted/30 px-2 py-1">
-                          Units {unitStats.available}/{unitStats.total}
+                          Total Units {unitStats.total}
                         </span>
-                        <span className="rounded-md border bg-muted/30 px-2 py-1">
-                          {unitStats.total > 0 ? "Has units" : "No units"}
-                        </span>
-                        {project.area_size > 0 ? <span>{project.area_size.toLocaleString()} m2</span> : null}
-                      </div>
-
-                      <div onClick={(event) => event.stopPropagation()}>
-                        <Select
-                          value={project.status}
-                          onValueChange={(value) => {
-                            void handleProjectStatusChange(project, value);
-                          }}
-                          disabled={deletingIdSet.has(project.id) || statusUpdatingIdSet.has(project.id)}
-                        >
-                          <SelectTrigger className={`h-8 w-full border ${statusMeta.triggerClassName}`}>
-                            <div className="flex items-center gap-2">
-                              <span className={`h-2 w-2 rounded-full ${statusMeta.dotClassName}`} />
-                              <SelectValue placeholder="Status" />
-                            </div>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="active">{STATUS_META.active.label}</SelectItem>
-                            <SelectItem value="completed">{STATUS_META.completed.label}</SelectItem>
-                            <SelectItem value="archived">{STATUS_META.archived.label}</SelectItem>
-                          </SelectContent>
-                        </Select>
                       </div>
 
                       <div className="flex items-center justify-end gap-1 pt-1" onClick={(event) => event.stopPropagation()}>
