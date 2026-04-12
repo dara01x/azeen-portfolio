@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -163,6 +163,13 @@ const PropertiesList = () => {
     dateFilter.trim() !== "" ||
     minPriceFilter.trim() !== "" ||
     maxPriceFilter.trim() !== "";
+
+  const activeFilterCount =
+    (cityFilter !== "all" ? 1 : 0) +
+    (areaFilter !== "all" ? 1 : 0) +
+    (dateFilter.trim() !== "" ? 1 : 0) +
+    (minPriceFilter.trim() !== "" ? 1 : 0) +
+    (maxPriceFilter.trim() !== "" ? 1 : 0);
 
   const resetFilters = () => {
     setCityFilter("all");
@@ -838,7 +845,11 @@ const PropertiesList = () => {
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 Filters
-                {hasActiveFilters ? <span className="text-xs">Active</span> : null}
+                {hasActiveFilters ? (
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[11px] font-semibold text-primary">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-[320px] p-4">
@@ -846,15 +857,9 @@ const PropertiesList = () => {
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold">Filter Properties</p>
                   {hasActiveFilters ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={resetFilters}
-                    >
-                      Reset
-                    </Button>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                      {activeFilterCount} active
+                    </span>
                   ) : null}
                 </div>
 
@@ -914,6 +919,19 @@ const PropertiesList = () => {
                     />
                   </div>
                 </div>
+
+                <Button
+                  type="button"
+                  className="h-9 w-full gap-2"
+                  onClick={() => {
+                    resetFilters();
+                    setFiltersOpen(false);
+                  }}
+                  disabled={!hasActiveFilters}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset All Filters
+                </Button>
               </div>
             </PopoverContent>
           </Popover>
