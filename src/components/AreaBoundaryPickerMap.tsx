@@ -54,6 +54,8 @@ function emptyFeatureCollection() {
 
 function boundaryFeatureCollection(points: AreaBoundaryPoint[]) {
   const lineCoordinates = points.map((point) => toLngLat(point));
+  const closedLineCoordinates =
+    lineCoordinates.length >= 3 ? [...lineCoordinates, lineCoordinates[0]] : lineCoordinates;
   const features: Feature[] = [];
 
   if (lineCoordinates.length >= 2) {
@@ -62,7 +64,7 @@ function boundaryFeatureCollection(points: AreaBoundaryPoint[]) {
       properties: {},
       geometry: {
         type: "LineString",
-        coordinates: lineCoordinates,
+        coordinates: closedLineCoordinates,
       },
     });
   }
@@ -84,12 +86,15 @@ function boundaryFeatureCollection(points: AreaBoundaryPoint[]) {
   } as FeatureCollection;
 }
 
-function createVertexMarkerElement(index: number) {
+function createVertexMarkerElement(index: number, total: number) {
   const element = document.createElement("div");
+  const isStart = index === 0;
+  const isEnd = total > 1 && index === total - 1;
+
   element.style.width = "24px";
   element.style.height = "24px";
   element.style.borderRadius = "9999px";
-  element.style.background = "#0f766e";
+  element.style.background = isEnd ? "#ea580c" : "#0f766e";
   element.style.color = "white";
   element.style.fontSize = "11px";
   element.style.fontWeight = "700";
@@ -99,7 +104,8 @@ function createVertexMarkerElement(index: number) {
   element.style.border = "2px solid #ccfbf1";
   element.style.boxShadow = "0 2px 10px rgba(15, 118, 110, 0.35)";
   element.style.userSelect = "none";
-  element.innerText = String(index + 1);
+  element.innerText = isStart ? "S" : isEnd ? "E" : String(index + 1);
+  element.title = isStart ? "Start point" : isEnd ? "End point" : `Point ${index + 1}`;
   return element;
 }
 
@@ -237,7 +243,7 @@ export function AreaBoundaryPickerMap({
       markersRef.current = [];
 
       points.forEach((point, index) => {
-        const marker = new maplibre.Marker({ element: createVertexMarkerElement(index) })
+        const marker = new maplibre.Marker({ element: createVertexMarkerElement(index, points.length) })
           .setLngLat(toLngLat(point))
           .addTo(map);
 

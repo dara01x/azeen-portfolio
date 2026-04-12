@@ -285,7 +285,7 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
                 <AreaBoundaryPickerMap points={boundaryPoints} onChange={setBoundaryPoints} />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">
-                    Click on map to add boundary points. Minimum {MIN_AREA_BOUNDARY_POINTS} points required.
+                    Click on map to add boundary points. First point is Start (S), last point is End (E), and the boundary closes automatically. Minimum {MIN_AREA_BOUNDARY_POINTS} points required.
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
@@ -340,7 +340,7 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
                 <AreaBoundaryPickerMap points={editBoundaryPoints} onChange={setEditBoundaryPoints} />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">
-                    Click on map to update boundary points. Minimum {MIN_AREA_BOUNDARY_POINTS} points required.
+                    Click on map to update boundary points. First point is Start (S), last point is End (E), and the boundary closes automatically. Minimum {MIN_AREA_BOUNDARY_POINTS} points required.
                   </p>
                   <div className="flex items-center gap-2">
                     <Button

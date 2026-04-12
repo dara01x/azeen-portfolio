@@ -68,6 +68,8 @@ function emptyFeatureCollection() {
 
 function areaBoundaryFeatureCollection(points: AreaBoundaryPoint[]) {
   const lineCoordinates = points.map((point) => toLngLat(point));
+  const closedLineCoordinates =
+    lineCoordinates.length >= 3 ? [...lineCoordinates, lineCoordinates[0]] : lineCoordinates;
   const features: Feature[] = [];
 
   if (lineCoordinates.length >= 2) {
@@ -76,7 +78,7 @@ function areaBoundaryFeatureCollection(points: AreaBoundaryPoint[]) {
       properties: {},
       geometry: {
         type: "LineString",
-        coordinates: lineCoordinates,
+        coordinates: closedLineCoordinates,
       },
     });
   }
