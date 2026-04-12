@@ -139,6 +139,13 @@ function createPopupContent(point: AreaMapPropertyPoint): HTMLDivElement {
   container.style.padding = "2px 0";
   container.style.minWidth = "170px";
 
+  const link = document.createElement("a");
+  link.href = `/properties/${point.id}`;
+  link.style.display = "block";
+  link.style.textDecoration = "none";
+  link.style.color = "inherit";
+  link.style.cursor = "pointer";
+
   const title = document.createElement("p");
   title.style.fontSize = "13px";
   title.style.fontWeight = "700";
@@ -164,10 +171,11 @@ function createPopupContent(point: AreaMapPropertyPoint): HTMLDivElement {
   coordinates.style.margin = "2px 0 0 0";
   coordinates.textContent = `${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}`;
 
-  container.appendChild(title);
-  container.appendChild(code);
-  container.appendChild(price);
-  container.appendChild(coordinates);
+  link.appendChild(title);
+  link.appendChild(code);
+  link.appendChild(price);
+  link.appendChild(coordinates);
+  container.appendChild(link);
 
   return container;
 }
