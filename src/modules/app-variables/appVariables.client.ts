@@ -1,7 +1,7 @@
 "use client";
 
 import { auth } from "@/lib/firebase/client";
-import type { AppVariableItem, AppVariableType } from "@/modules/app-variables/types";
+import type { AppVariableItem, AppVariableType, AreaBoundaryPoint } from "@/modules/app-variables/types";
 
 async function authorizedJsonFetch(url: string, options: RequestInit = {}) {
   const idToken = await auth.currentUser?.getIdToken();
@@ -38,26 +38,35 @@ export async function getVariables(type: AppVariableType): Promise<AppVariableIt
   return Array.isArray(payload.variables) ? payload.variables : [];
 }
 
-export async function createVariable(type: AppVariableType, name: string): Promise<AppVariableItem> {
-  const payload = await authorizedJsonFetch("/api/app-variables/create", {
+type VariablePayload = {
+  area_boundary?: AreaBoundaryPoint[];
+};
+
+export async function createVariable(
+  type: AppVariableType,
+  name: string,
+  payload?: VariablePayload,
+): Promise<AppVariableItem> {
+  const responsePayload = await authorizedJsonFetch("/api/app-variables/create", {
     method: "POST",
-    body: JSON.stringify({ type, name }),
+    body: JSON.stringify({ type, name, payload }),
   });
 
-  return payload.variable as AppVariableItem;
+  return responsePayload.variable as AppVariableItem;
 }
 
 export async function updateVariable(
   type: AppVariableType,
   id: string,
   name: string,
+  payload?: VariablePayload,
 ): Promise<AppVariableItem> {
-  const payload = await authorizedJsonFetch("/api/app-variables/update", {
+  const responsePayload = await authorizedJsonFetch("/api/app-variables/update", {
     method: "PUT",
-    body: JSON.stringify({ type, id, name }),
+    body: JSON.stringify({ type, id, name, payload }),
   });
 
-  return payload.variable as AppVariableItem;
+  return responsePayload.variable as AppVariableItem;
 }
 
 export async function deleteVariable(type: AppVariableType, id: string): Promise<void> {

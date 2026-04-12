@@ -11,6 +11,7 @@ export async function PUT(request: Request) {
     const type = typeof body?.type === "string" ? body.type : "";
     const id = typeof body?.id === "string" ? body.id : "";
     const name = typeof body?.name === "string" ? body.name : "";
+    const payload = body?.payload && typeof body.payload === "object" ? body.payload : undefined;
 
     if (!type || !id || !name.trim()) {
       return Response.json(
@@ -22,7 +23,7 @@ export async function PUT(request: Request) {
       );
     }
 
-    const variable = await updateVariable(type, id, name);
+    const variable = await updateVariable(type, id, name, payload);
 
     return Response.json({
       success: true,
@@ -37,7 +38,8 @@ export async function PUT(request: Request) {
     const status =
       message === "Invalid variable type." ||
       message === "Name is required." ||
-      message === "Variable id is required."
+      message === "Variable id is required." ||
+      message === "Area boundary must contain at least 3 points."
         ? 400
         : message === "Variable not found."
           ? 404

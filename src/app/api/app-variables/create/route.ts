@@ -10,6 +10,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const type = typeof body?.type === "string" ? body.type : "";
     const name = typeof body?.name === "string" ? body.name : "";
+    const payload = body?.payload && typeof body.payload === "object" ? body.payload : undefined;
 
     if (!type || !name.trim()) {
       return Response.json(
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const variable = await createVariable(type, name);
+    const variable = await createVariable(type, name, payload);
 
     return Response.json(
       {
@@ -36,7 +37,12 @@ export async function POST(request: Request) {
     }
 
     const message = error instanceof Error ? error.message : "Failed to create variable.";
-    const status = message === "Invalid variable type." || message === "Name is required." ? 400 : 500;
+    const status =
+      message === "Invalid variable type." ||
+      message === "Name is required." ||
+      message === "Area boundary must contain at least 3 points."
+        ? 400
+        : 500;
 
     return Response.json({ success: false, error: message }, { status });
   }

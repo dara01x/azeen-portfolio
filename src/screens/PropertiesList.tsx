@@ -22,6 +22,7 @@ import { toast } from "@/components/ui/sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { PropertiesAreaMap, type AreaMapPropertyPoint } from "@/components/PropertiesAreaMap";
 import {
   deleteProperty as deletePropertyById,
   getProperties as fetchProperties,
@@ -30,7 +31,7 @@ import { createStory, getStories, uploadStoryVideo } from "@/modules/stories/sto
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
 import type { Property, Story } from "@/types";
-import type { AppVariableItem } from "@/modules/app-variables/types";
+import type { AppVariableItem, AreaBoundaryPoint } from "@/modules/app-variables/types";
 
 type DeleteDialogState = {
   open: boolean;
@@ -78,6 +79,46 @@ function formatStoryAge(value: string | null | undefined): string {
 
   const diffHours = Math.floor(diffMinutes / 60);
   return `${diffHours}h ago`;
+}
+
+function normalizeAreaBoundaryPoints(points?: AreaBoundaryPoint[]) {
+  if (!Array.isArray(points)) {
+    return [] as AreaBoundaryPoint[];
+  }
+
+  return points.filter(
+    (point) =>
+      typeof point?.lat === "number" &&
+      Number.isFinite(point.lat) &&
+      typeof point?.lng === "number" &&
+      Number.isFinite(point.lng),
+  );
+}
+
+function isPointInsidePolygon(point: AreaBoundaryPoint, polygon: AreaBoundaryPoint[]) {
+  if (polygon.length < 3) {
+    return false;
+  }
+
+  let inside = false;
+
+  for (let index = 0, prevIndex = polygon.length - 1; index < polygon.length; prevIndex = index, index += 1) {
+    const current = polygon[index];
+    const previous = polygon[prevIndex];
+
+    const intersects =
+      (current.lat > point.lat) !== (previous.lat > point.lat) &&
+      point.lng <
+        ((previous.lng - current.lng) * (point.lat - current.lat)) /
+          (previous.lat - current.lat || Number.EPSILON) +
+          current.lng;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
 }
 
 const PropertiesList = () => {
@@ -279,6 +320,38 @@ const PropertiesList = () => {
     return new Date(parsedCreatedAt).toISOString().slice(0, 10);
   };
 
+  const selectedAreaItem =
+    areaFilter === "all" ? null : areas.find((area) => area.name === areaFilter) || null;
+  const selectedAreaBoundary = normalizeAreaBoundaryPoints(selectedAreaItem?.area_boundary);
+  const useBoundaryAreaFiltering = selectedAreaBoundary.length >= 3;
+
+  const propertyMatchesSelectedArea = (property: Property) => {
+    if (areaFilter === "all") {
+      return true;
+    }
+
+    if (!useBoundaryAreaFiltering) {
+      return property.area === areaFilter;
+    }
+
+    if (
+      typeof property.lat !== "number" ||
+      !Number.isFinite(property.lat) ||
+      typeof property.lng !== "number" ||
+      !Number.isFinite(property.lng)
+    ) {
+      return false;
+    }
+
+    return isPointInsidePolygon(
+      {
+        lat: property.lat,
+        lng: property.lng,
+      },
+      selectedAreaBoundary,
+    );
+  };
+
   const filtered = properties.filter((p) => {
     if (search) {
       const term = search.toLowerCase();
@@ -296,7 +369,7 @@ const PropertiesList = () => {
     }
 
     if (cityFilter !== "all" && p.city_id !== cityFilter) return false;
-    if (areaFilter !== "all" && p.area !== areaFilter) return false;
+  if (!propertyMatchesSelectedArea(p)) return false;
 
     if (dateFilter.trim() !== "") {
       const propertyDate = getPropertyFilterDate(p);
@@ -317,6 +390,32 @@ const PropertiesList = () => {
 
     return true;
   });
+
+  const areaMatchedCount = areaFilter === "all" ? 0 : filtered.length;
+  const areaMapPoints: AreaMapPropertyPoint[] =
+    areaFilter === "all"
+      ? []
+      : filtered.flatMap((property) => {
+          if (
+            typeof property.lat !== "number" ||
+            !Number.isFinite(property.lat) ||
+            typeof property.lng !== "number" ||
+            !Number.isFinite(property.lng)
+          ) {
+            return [];
+          }
+
+          return [
+            {
+              id: property.id,
+              title: property.title,
+              lat: property.lat,
+              lng: property.lng,
+              propertyCode: getPropertyCode(property),
+              priceLabel: `${property.currency} ${property.price.toLocaleString()}`,
+            },
+          ];
+        });
 
   useEffect(() => {
     setCurrentPage(1);
@@ -418,7 +517,7 @@ const PropertiesList = () => {
 
   const deleteDialogDescription = dialogIsBulkDelete
     ? `This will remove ${dialogPropertyCount} selected properties from Firestore and delete all their uploaded images from Firebase Storage. This action cannot be undone.`
-    : `This will remove ${deleteDialog.subjectLabel ? `\"${deleteDialog.subjectLabel}\"` : "this property"} from Firestore and delete all uploaded images from Firebase Storage. This action cannot be undone.`;
+    : `This will remove ${deleteDialog.subjectLabel ? `"${deleteDialog.subjectLabel}"` : "this property"} from Firestore and delete all uploaded images from Firebase Storage. This action cannot be undone.`;
 
   const deleteActionLabel = dialogIsDeleting
     ? "Deleting..."
@@ -701,6 +800,26 @@ const PropertiesList = () => {
           )}
         </div>
       </Card>
+
+      {areaFilter !== "all" ? (
+        <Card className="mb-4">
+          <div className="border-b px-4 py-4">
+            <p className="text-base font-semibold">Area Map</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Showing {areaMapPoints.length} mapped properties out of {areaMatchedCount} matches in area: {areaFilter}
+            </p>
+          </div>
+          <div className="p-4">
+            {areaMapPoints.length > 0 || selectedAreaBoundary.length >= 3 ? (
+              <PropertiesAreaMap points={areaMapPoints} areaBoundary={selectedAreaBoundary} />
+            ) : (
+              <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+                No exact property coordinates available in this area yet. Add latitude/longitude in property details to show pins here.
+              </div>
+            )}
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="p-1.5">
         {lookupError ? <p className="px-3 pt-3 text-sm text-destructive">{lookupError}</p> : null}

@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/PageHeader";
+import { AreaBoundaryPickerMap } from "@/components/AreaBoundaryPickerMap";
 import {
   createVariable,
   deleteVariable,
@@ -25,7 +26,28 @@ import {
   updateVariable,
 } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
-import type { AppVariableItem, AppVariableType } from "@/modules/app-variables/types";
+import type { AppVariableItem, AppVariableType, AreaBoundaryPoint } from "@/modules/app-variables/types";
+
+const MIN_AREA_BOUNDARY_POINTS = 3;
+
+function normalizeAreaBoundaryPoints(points?: AreaBoundaryPoint[]) {
+  if (!Array.isArray(points)) {
+    return [] as AreaBoundaryPoint[];
+  }
+
+  return points
+    .filter(
+      (point) =>
+        typeof point?.lat === "number" &&
+        Number.isFinite(point.lat) &&
+        typeof point?.lng === "number" &&
+        Number.isFinite(point.lng),
+    )
+    .map((point) => ({
+      lat: Number(point.lat.toFixed(6)),
+      lng: Number(point.lng.toFixed(6)),
+    }));
+}
 
 function VariableTable({ title, type }: { title: string; type: AppVariableType }) {
   const { user, loading: authLoading } = useAuth();
@@ -42,6 +64,9 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
   const [name, setName] = useState("");
   const [editName, setEditName] = useState("");
   const [selectedItem, setSelectedItem] = useState<AppVariableItem | null>(null);
+  const [boundaryPoints, setBoundaryPoints] = useState<AreaBoundaryPoint[]>([]);
+  const [editBoundaryPoints, setEditBoundaryPoints] = useState<AreaBoundaryPoint[]>([]);
+  const isAreaType = type === "areas";
 
   const loadItems = useCallback(async () => {
     if (authLoading || !user) {
@@ -72,12 +97,23 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
       return;
     }
 
+    const normalizedBoundary = normalizeAreaBoundaryPoints(boundaryPoints);
+    if (isAreaType && normalizedBoundary.length < MIN_AREA_BOUNDARY_POINTS) {
+      setError("Area boundary must contain at least 3 points.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
     try {
-      await createVariable(type, trimmed);
+      await createVariable(
+        type,
+        trimmed,
+        isAreaType ? { area_boundary: normalizedBoundary } : undefined,
+      );
       setName("");
+      setBoundaryPoints([]);
       setDialogOpen(false);
       await loadItems();
     } catch (createError) {
@@ -91,6 +127,7 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
   function openEdit(item: AppVariableItem) {
     setSelectedItem(item);
     setEditName(item.name);
+    setEditBoundaryPoints(normalizeAreaBoundaryPoints(item.area_boundary));
     setEditDialogOpen(true);
   }
 
@@ -105,14 +142,26 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
       return;
     }
 
+    const normalizedBoundary = normalizeAreaBoundaryPoints(editBoundaryPoints);
+    if (isAreaType && normalizedBoundary.length < MIN_AREA_BOUNDARY_POINTS) {
+      setError("Area boundary must contain at least 3 points.");
+      return;
+    }
+
     setUpdating(true);
     setError(null);
 
     try {
-      await updateVariable(type, selectedItem.id, trimmed);
+      await updateVariable(
+        type,
+        selectedItem.id,
+        trimmed,
+        isAreaType ? { area_boundary: normalizedBoundary } : undefined,
+      );
       setEditDialogOpen(false);
       setSelectedItem(null);
       setEditName("");
+      setEditBoundaryPoints([]);
       await loadItems();
     } catch (updateError) {
       const message = updateError instanceof Error ? updateError.message : "Failed to update value.";
@@ -159,17 +208,31 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              {isAreaType ? <TableHead className="w-[160px]">Map Boundary</TableHead> : null}
               <TableHead className="w-[140px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell className="text-sm text-muted-foreground" colSpan={2}>No values yet.</TableCell>
+                <TableCell className="text-sm text-muted-foreground" colSpan={isAreaType ? 3 : 2}>No values yet.</TableCell>
               </TableRow>
             ) : items.map(item => (
               <TableRow key={item.id}>
                 <TableCell>{item.name}</TableCell>
+                {isAreaType ? (
+                  <TableCell>
+                    {normalizeAreaBoundaryPoints(item.area_boundary).length >= MIN_AREA_BOUNDARY_POINTS ? (
+                      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                        Set
+                      </span>
+                    ) : (
+                      <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        Missing
+                      </span>
+                    )}
+                  </TableCell>
+                ) : null}
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
                     <Button
@@ -200,10 +263,55 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
         </Table>
         )}
       </CardContent>
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent><DialogHeader><DialogTitle>Add {title}</DialogTitle></DialogHeader>
-          <div><Label>Name</Label><Input value={name} onChange={e => setName(e.target.value)} /></div>
-          <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            setBoundaryPoints([]);
+          }
+        }}
+      >
+        <DialogContent className={isAreaType ? "max-w-3xl" : undefined}><DialogHeader><DialogTitle>Add {title}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} />
+            </div>
+
+            {isAreaType ? (
+              <div className="space-y-3">
+                <Label>Area Boundary on Map</Label>
+                <AreaBoundaryPickerMap points={boundaryPoints} onChange={setBoundaryPoints} />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Click on map to add boundary points. Minimum {MIN_AREA_BOUNDARY_POINTS} points required.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBoundaryPoints((current) => current.slice(0, -1))}
+                      disabled={boundaryPoints.length === 0}
+                    >
+                      Undo Point
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBoundaryPoints([])}
+                      disabled={boundaryPoints.length === 0}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => { setDialogOpen(false); setBoundaryPoints([]); }}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -214,14 +322,49 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
           if (!open) {
             setSelectedItem(null);
             setEditName("");
+            setEditBoundaryPoints([]);
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className={isAreaType ? "max-w-3xl" : undefined}>
           <DialogHeader><DialogTitle>Edit {title}</DialogTitle></DialogHeader>
-          <div>
-            <Label>Name</Label>
-            <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+          <div className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+
+            {isAreaType ? (
+              <div className="space-y-3">
+                <Label>Area Boundary on Map</Label>
+                <AreaBoundaryPickerMap points={editBoundaryPoints} onChange={setEditBoundaryPoints} />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Click on map to update boundary points. Minimum {MIN_AREA_BOUNDARY_POINTS} points required.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditBoundaryPoints((current) => current.slice(0, -1))}
+                      disabled={editBoundaryPoints.length === 0}
+                    >
+                      Undo Point
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditBoundaryPoints([])}
+                      disabled={editBoundaryPoints.length === 0}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
