@@ -61,6 +61,7 @@ export interface Property {
   title: string;
   type_id: string;
   listing_type: "sale" | "rent";
+  listing_date?: string;
   status: "available" | "sold" | "archived";
   price: number;
   currency: "USD" | "IQD";

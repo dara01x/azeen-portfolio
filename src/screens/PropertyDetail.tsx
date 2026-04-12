@@ -27,6 +27,10 @@ import { useAuth } from "@/lib/auth/useAuth";
 import type { Property, User } from "@/types";
 import type { AppVariableItem } from "@/modules/app-variables/types";
 
+type PropertyViewRecord = Property & {
+  created_at?: string | null;
+};
+
 function GoogleMapPreview({
   coordinates,
 }: {
@@ -92,12 +96,25 @@ function formatOptionalMetric(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : "—";
 }
 
+function formatPropertyDate(value?: string | null) {
+  if (!value) {
+    return "—";
+  }
+
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return value;
+  }
+
+  return new Date(parsed).toLocaleDateString();
+}
+
 const PropertyDetail = () => {
   const params = useParams<{ id: string }>();
   const { user, loading: authLoading } = useAuth();
   const paramId = params?.id;
   const id = Array.isArray(paramId) ? paramId[0] : paramId;
-  const [property, setProperty] = useState<Property | null>(null);
+  const [property, setProperty] = useState<PropertyViewRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -261,6 +278,7 @@ const PropertyDetail = () => {
       ? { lat: property.lat, lng: property.lng }
       : null;
   const canViewAgentContact = user?.role === "admin";
+  const propertyDateLabel = formatPropertyDate(property.listing_date || property.created_at || null);
 
   const showImageControls = images.length > 1;
 
@@ -383,6 +401,7 @@ const PropertyDetail = () => {
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">ASKING PRICE</p>
               <p className="text-4xl font-bold text-slate-900 mt-1">{priceLabel}</p>
               <p className="text-sm text-slate-500 mt-1">{paymentTypeLabel}</p>
+              <p className="text-sm text-slate-500 mt-1">Date Listed: {propertyDateLabel}</p>
               <p className="text-xs font-mono text-slate-500 mt-2">ID: {propertyCode}</p>
             </div>
 
@@ -514,6 +533,7 @@ const PropertyDetail = () => {
                   <Field label="Property ID" value={propertyCode} />
                   <Field label="Type" value={typeName} />
                   <Field label="Listing Type" value={listingTypeLabel} />
+                  <Field label="Date" value={propertyDateLabel} />
                   <Field label="Ownership Type" value={ownershipTypeLabel} />
                 </div>
               </CardContent>

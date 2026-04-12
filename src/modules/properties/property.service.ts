@@ -157,6 +157,21 @@ function asUniqueStrings(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
+function asDateString(value: unknown) {
+  const raw = asString(value).trim();
+  if (!raw) {
+    return "";
+  }
+
+  const candidate = raw.length >= 10 ? raw.slice(0, 10) : raw;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
+    return "";
+  }
+
+  const parsed = Date.parse(`${candidate}T00:00:00.000Z`);
+  return Number.isFinite(parsed) ? candidate : "";
+}
+
 function safeDecodeURIComponent(value: string) {
   try {
     return decodeURIComponent(value);
@@ -324,6 +339,7 @@ function normalizePropertyData(input: PropertyWriteInput) {
     title: asString(input.title),
     type_id: asString(input.type_id),
     listing_type: (input.listing_type as Property["listing_type"]) || "sale",
+    listing_date: asDateString(input.listing_date),
     status: (input.status as Property["status"]) || "available",
     price: asNumber(input.price),
     currency: (input.currency as Property["currency"]) || "USD",
@@ -388,6 +404,7 @@ function mapDocToPropertyRecord(id: string, data: Record<string, unknown>): Prop
     title: asString(data.title),
     type_id: asString(data.type_id),
     listing_type: (data.listing_type as Property["listing_type"]) || "sale",
+    listing_date: asDateString(data.listing_date) || undefined,
     status: (data.status as Property["status"]) || "available",
     price: asNumber(data.price),
     currency: (data.currency as Property["currency"]) || "USD",

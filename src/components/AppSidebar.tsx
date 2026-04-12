@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import {
-  Building2, FolderKanban, Users, UserCog, Database, BarChart3,
+  Building2, FolderKanban, Users, UserCog, Database,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -12,7 +12,6 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/auth/useAuth";
 
 const mainNav = [
-  { title: "Dashboard", url: "/", icon: BarChart3 },
   { title: "Properties", url: "/properties", icon: Building2 },
   { title: "Projects", url: "/projects", icon: FolderKanban },
   { title: "Clients", url: "/clients", icon: Users },
@@ -37,7 +36,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="px-4 py-5">
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link href="/properties" className="flex items-center gap-2.5">
           <div className="relative h-9 w-9 overflow-hidden rounded-lg border bg-background shadow-sm">
             <Image
               src="/azeen-logo.webp"

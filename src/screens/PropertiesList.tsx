@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -16,6 +16,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "@/components/ui/sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,9 +26,10 @@ import {
   deleteProperty as deletePropertyById,
   getProperties as fetchProperties,
 } from "@/modules/properties/property.client";
+import { createStory, getStories, uploadStoryVideo } from "@/modules/stories/story.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
-import type { Property } from "@/types";
+import type { Property, Story } from "@/types";
 import type { AppVariableItem } from "@/modules/app-variables/types";
 
 type DeleteDialogState = {
@@ -37,13 +39,60 @@ type DeleteDialogState = {
 };
 
 const PROPERTIES_PAGE_SIZE = 10;
+const MAX_STORY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024;
+
+type StoryGroup = {
+  created_by_uid: string;
+  created_by_name: string;
+  created_by_role: Story["created_by_role"];
+  latest_story: Story;
+  stories: Story[];
+};
+
+function parseIsoTime(value: string | null | undefined): number {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatStoryAge(value: string | null | undefined): string {
+  const createdAt = parseIsoTime(value);
+
+  if (!createdAt) {
+    return "Just now";
+  }
+
+  const diffMs = Math.max(0, Date.now() - createdAt);
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+
+  if (diffMinutes < 1) {
+    return "Just now";
+  }
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  return `${diffHours}h ago`;
+}
 
 const PropertiesList = () => {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const storyInputRef = useRef<HTMLInputElement | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [storyError, setStoryError] = useState<string | null>(null);
+  const [uploadingStory, setUploadingStory] = useState(false);
+  const [storyDialogOpen, setStoryDialogOpen] = useState(false);
+  const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
+  const [activeStoryIndex, setActiveStoryIndex] = useState(0);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
@@ -51,6 +100,7 @@ const PropertiesList = () => {
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("");
   const [minPriceFilter, setMinPriceFilter] = useState("");
   const [maxPriceFilter, setMaxPriceFilter] = useState("");
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
@@ -69,12 +119,14 @@ const PropertiesList = () => {
   const hasActiveFilters =
     cityFilter !== "all" ||
     areaFilter !== "all" ||
+    dateFilter.trim() !== "" ||
     minPriceFilter.trim() !== "" ||
     maxPriceFilter.trim() !== "";
 
   const resetFilters = () => {
     setCityFilter("all");
     setAreaFilter("all");
+    setDateFilter("");
     setMinPriceFilter("");
     setMaxPriceFilter("");
   };
@@ -104,6 +156,38 @@ const PropertiesList = () => {
       .finally(() => {
         if (!cancelled) {
           setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!user) {
+      setStories([]);
+      setStoryError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setStoryError(null);
+
+    getStories()
+      .then((items) => {
+        if (!cancelled) {
+          setStories(items);
+        }
+      })
+      .catch((fetchError) => {
+        if (!cancelled) {
+          const message = fetchError instanceof Error ? fetchError.message : "Failed to load stories.";
+          setStoryError(message);
         }
       });
 
@@ -175,6 +259,26 @@ const PropertiesList = () => {
     return parsed;
   };
 
+  const getPropertyFilterDate = (property: Property) => {
+    const listingDate = (property.listing_date || "").trim();
+    const normalizedListingDate = listingDate.length >= 10 ? listingDate.slice(0, 10) : listingDate;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedListingDate)) {
+      return normalizedListingDate;
+    }
+
+    const createdAt = (property as Property & { created_at?: string | null }).created_at;
+    if (!createdAt) {
+      return "";
+    }
+
+    const parsedCreatedAt = Date.parse(createdAt);
+    if (!Number.isFinite(parsedCreatedAt)) {
+      return "";
+    }
+
+    return new Date(parsedCreatedAt).toISOString().slice(0, 10);
+  };
+
   const filtered = properties.filter((p) => {
     if (search) {
       const term = search.toLowerCase();
@@ -193,6 +297,13 @@ const PropertiesList = () => {
 
     if (cityFilter !== "all" && p.city_id !== cityFilter) return false;
     if (areaFilter !== "all" && p.area !== areaFilter) return false;
+
+    if (dateFilter.trim() !== "") {
+      const propertyDate = getPropertyFilterDate(p);
+      if (propertyDate !== dateFilter) {
+        return false;
+      }
+    }
 
     const minPrice = parseFilterNumber(minPriceFilter);
     if (minPrice != null && p.price < minPrice) {
@@ -213,6 +324,7 @@ const PropertiesList = () => {
     search,
     cityFilter,
     areaFilter,
+    dateFilter,
     minPriceFilter,
     maxPriceFilter,
   ]);
@@ -236,6 +348,57 @@ const PropertiesList = () => {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
+
+  const activeStories = useMemo(
+    () =>
+      stories
+        .filter((story) => parseIsoTime(story.expires_at) > Date.now())
+        .sort((a, b) => parseIsoTime(b.created_at) - parseIsoTime(a.created_at)),
+    [stories],
+  );
+
+  const storyGroups = useMemo(() => {
+    const grouped = new Map<string, StoryGroup>();
+
+    activeStories.forEach((story) => {
+      const key = story.created_by_uid || story.id;
+      const existing = grouped.get(key);
+
+      if (!existing) {
+        grouped.set(key, {
+          created_by_uid: story.created_by_uid,
+          created_by_name: story.created_by_name,
+          created_by_role: story.created_by_role,
+          latest_story: story,
+          stories: [story],
+        });
+        return;
+      }
+
+      existing.stories.push(story);
+
+      if (parseIsoTime(story.created_at) > parseIsoTime(existing.latest_story.created_at)) {
+        existing.latest_story = story;
+      }
+    });
+
+    return Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        stories: [...group.stories].sort(
+          (a, b) => parseIsoTime(a.created_at) - parseIsoTime(b.created_at),
+        ),
+      }))
+      .sort(
+        (a, b) => parseIsoTime(b.latest_story.created_at) - parseIsoTime(a.latest_story.created_at),
+      );
+  }, [activeStories]);
+
+  const canPublishStory = !!user && (user.role === "admin" || user.role === "company");
+  const currentDialogStory = activeStoryGroup?.stories[activeStoryIndex] || null;
+  const canGoPreviousStory = activeStoryIndex > 0;
+  const canGoNextStory =
+    !!activeStoryGroup && activeStoryIndex < activeStoryGroup.stories.length - 1;
 
   const selectedIdSet = new Set(selectedPropertyIds);
   const visiblePropertyIds = paginatedProperties.map((property) => property.id);
@@ -396,6 +559,76 @@ const PropertiesList = () => {
     closeDeleteDialog();
   }
 
+  function openStoryFilePicker() {
+    if (!canPublishStory || uploadingStory) {
+      return;
+    }
+
+    setStoryError(null);
+    storyInputRef.current?.click();
+  }
+
+  async function handleStoryFileSelected(event: ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!selectedFile || !canPublishStory || uploadingStory) {
+      return;
+    }
+
+    if (!selectedFile.type.startsWith("video/")) {
+      setStoryError("Please select a video file for stories.");
+      return;
+    }
+
+    if (selectedFile.size > MAX_STORY_VIDEO_SIZE_BYTES) {
+      setStoryError("Story video must be 30MB or less.");
+      return;
+    }
+
+    setUploadingStory(true);
+    setStoryError(null);
+
+    try {
+      const videoUrl = await uploadStoryVideo(selectedFile);
+      const createdStory = await createStory({ video_url: videoUrl });
+
+      setStories((current) =>
+        [createdStory, ...current].sort(
+          (a, b) => parseIsoTime(b.created_at) - parseIsoTime(a.created_at),
+        ),
+      );
+    } catch (storyUploadError) {
+      const message =
+        storyUploadError instanceof Error
+          ? storyUploadError.message
+          : "Failed to upload story video.";
+      setStoryError(message);
+    } finally {
+      setUploadingStory(false);
+    }
+  }
+
+  function openStoryViewer(group: StoryGroup) {
+    setActiveStoryGroup(group);
+    setActiveStoryIndex(0);
+    setStoryDialogOpen(true);
+  }
+
+  function goToPreviousStory() {
+    setActiveStoryIndex((current) => (current > 0 ? current - 1 : current));
+  }
+
+  function goToNextStory() {
+    setActiveStoryIndex((current) => {
+      if (!activeStoryGroup) {
+        return current;
+      }
+
+      return current < activeStoryGroup.stories.length - 1 ? current + 1 : current;
+    });
+  }
+
   return (
     <div>
       <PageHeader
@@ -403,6 +636,72 @@ const PropertiesList = () => {
         description="Manage your property listings"
         actions={<Button asChild><Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link></Button>}
       />
+
+      {storyError ? <p className="mb-4 text-sm text-destructive">{storyError}</p> : null}
+
+      <Card className="mb-4">
+        <div className="flex items-start justify-between gap-4 border-b px-4 py-4">
+          <div>
+            <p className="text-base font-semibold">Stories</p>
+            <p className="mt-1 text-sm text-muted-foreground">Short videos visible for 24 hours.</p>
+          </div>
+          {canPublishStory ? (
+            <Button size="sm" onClick={openStoryFilePicker} disabled={uploadingStory}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              {uploadingStory ? "Uploading..." : "Add Story"}
+            </Button>
+          ) : null}
+          <input
+            ref={storyInputRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={(event) => {
+              void handleStoryFileSelected(event);
+            }}
+          />
+        </div>
+        <div className="px-4 py-4">
+          {storyGroups.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No active stories yet.</p>
+          ) : (
+            <div className="flex gap-4 overflow-x-auto pb-2">
+              {storyGroups.map((group) => (
+                <button
+                  key={group.created_by_uid || group.latest_story.id}
+                  type="button"
+                  className="shrink-0 text-left"
+                  onClick={() => openStoryViewer(group)}
+                >
+                  <span className="relative block h-20 w-20 rounded-full bg-gradient-to-br from-primary/80 via-rose-400 to-amber-400 p-[2px]">
+                    <span className="block h-full w-full overflow-hidden rounded-full bg-black">
+                      <video
+                        src={group.latest_story.video_url}
+                        className="h-full w-full object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    </span>
+                    {group.stories.length > 1 ? (
+                      <span className="absolute bottom-0 right-0 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-background px-1 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                        {group.stories.length}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="mt-2 block max-w-[84px] truncate text-xs font-medium">
+                    {group.created_by_name}
+                  </span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    {formatStoryAge(group.latest_story.created_at)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
+
       <Card className="p-1.5">
         {lookupError ? <p className="px-3 pt-3 text-sm text-destructive">{lookupError}</p> : null}
         <div className="flex flex-wrap gap-2 p-3 pb-0">
@@ -460,6 +759,17 @@ const PropertiesList = () => {
                       {areas.map((area) => <SelectItem key={area.id} value={area.name}>{area.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Date</p>
+                  <Input
+                    type="date"
+                    value={dateFilter}
+                    onChange={(event) => setDateFilter(event.target.value)}
+                    className="h-9 bg-muted/50 border-0"
+                    aria-label="Property date"
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -663,6 +973,77 @@ const PropertiesList = () => {
           </>
         )}
       </Card>
+
+      <Dialog
+        open={storyDialogOpen}
+        onOpenChange={(open) => {
+          setStoryDialogOpen(open);
+
+          if (!open) {
+            setActiveStoryGroup(null);
+            setActiveStoryIndex(0);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md overflow-hidden p-0">
+          {currentDialogStory ? (
+            <>
+              <DialogTitle className="sr-only">Story video</DialogTitle>
+              <DialogDescription className="sr-only">
+                Story from {currentDialogStory.created_by_name}
+              </DialogDescription>
+              <div className="bg-black">
+                <video
+                  key={currentDialogStory.id}
+                  src={currentDialogStory.video_url}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="max-h-[70vh] w-full bg-black"
+                  onEnded={() => {
+                    if (canGoNextStory) {
+                      goToNextStory();
+                    }
+                  }}
+                />
+              </div>
+              <div className="px-4 pb-4">
+                <p className="text-sm font-semibold">{activeStoryGroup?.created_by_name}</p>
+                <p className="text-xs text-muted-foreground capitalize">
+                  {activeStoryGroup?.created_by_name} · {formatStoryAge(currentDialogStory.created_at)}
+                </p>
+                {activeStoryGroup && activeStoryGroup.stories.length > 1 ? (
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={goToPreviousStory}
+                      disabled={!canGoPreviousStory}
+                    >
+                      <ChevronLeft className="mr-1 h-4 w-4" />
+                      Previous
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      {activeStoryIndex + 1} / {activeStoryGroup.stories.length}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={goToNextStory}
+                      disabled={!canGoNextStory}
+                    >
+                      Next
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={deleteDialog.open}

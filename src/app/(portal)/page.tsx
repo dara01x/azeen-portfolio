@@ -1,7 +1,5 @@
-"use client";
-
-import Dashboard from "@/screens/Dashboard";
+import { redirect } from "next/navigation";
 
 export default function HomePage() {
-  return <Dashboard />;
+  redirect("/properties");
 }

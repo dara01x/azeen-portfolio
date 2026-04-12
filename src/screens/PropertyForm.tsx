@@ -179,7 +179,7 @@ function getPreferredText(...values: Array<string | undefined>) {
 }
 
 const defaultProperty: Omit<Property, "id"> = {
-  title: "", type_id: "", listing_type: "sale", status: "available",
+  title: "", type_id: "", listing_type: "sale", listing_date: "", status: "available",
   price: 0, currency: "USD", payment_type: "cash",
   city_id: "", area: "", address_en: "", address_ku: "", address_ar: "",
   area_size: 0, bedrooms: 0, suit_rooms: 0, bathrooms: 0, balconies: 0, floors: 1, condition: "new",
@@ -612,6 +612,7 @@ const PropertyForm = () => {
                 <SelectContent><SelectItem value="sale">Sale</SelectItem><SelectItem value="rent">Rent</SelectItem></SelectContent>
               </Select>
             </div>
+            <div className="space-y-2"><Label>Date (Optional)</Label><Input type="date" value={form.listing_date || ""} onChange={e => update("listing_date", e.target.value || undefined)} /></div>
             <div className="space-y-2"><Label>Ownership Type (Optional)</Label>
               <Select value={form.ownership_type || ""} onValueChange={v => update("ownership_type", v)}>
                 <SelectTrigger><SelectValue placeholder="Select ownership type" /></SelectTrigger>
