@@ -21,7 +21,13 @@ import {
   updateProject,
   uploadProjectImageBlobUrls,
 } from "@/modules/projects/project.client";
-import { createUnit, deleteUnit as deleteUnitById, getUnits, updateUnit } from "@/modules/units/unit.client";
+import {
+  createUnit,
+  deleteUnit as deleteUnitById,
+  getUnits,
+  updateUnit,
+  uploadUnitImageBlobUrls,
+} from "@/modules/units/unit.client";
 import type { Project, Unit, UnitOption, User } from "@/types";
 
 type LocalImageFileMap = Record<string, File>;
@@ -262,6 +268,7 @@ const ProjectForm = () => {
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
+  const [unitLocalImageFiles, setUnitLocalImageFiles] = useState<LocalImageFileMap>({});
   const [units, setUnits] = useState<Unit[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [unitsError, setUnitsError] = useState<string | null>(null);
@@ -275,6 +282,19 @@ const ProjectForm = () => {
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
+
+  const clearUnitLocalImageFiles = () => {
+    setUnitLocalImageFiles((current) => {
+      Object.keys(current).forEach((imageUrl) => {
+        if (imageUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(imageUrl);
+        }
+      });
+
+      return {};
+    });
+  };
+
   const areaNames = useMemo(
     () => Array.from(new Set(areas.map((item) => item.name.trim()).filter(Boolean))),
     [areas],
@@ -469,6 +489,7 @@ const ProjectForm = () => {
       return;
     }
 
+    clearUnitLocalImageFiles();
     setUnitEditingId(null);
     setUnitError(null);
     setUnitDraft(createDefaultUnitDraft(id));
@@ -499,6 +520,8 @@ const ProjectForm = () => {
       balconies: Number(unit.features?.balconies ?? unit.balconies ?? 0),
     };
 
+    clearUnitLocalImageFiles();
+
     const { id: _unitId, ...rest } = unit;
     setUnitDraft({
       ...createDefaultUnitDraft(unit.project_id),
@@ -521,6 +544,7 @@ const ProjectForm = () => {
   };
 
   const closeUnitEditor = () => {
+    clearUnitLocalImageFiles();
     setUnitEditorOpen(false);
     setUnitEditingId(null);
     setUnitError(null);
@@ -647,13 +671,70 @@ const ProjectForm = () => {
         internal_notes: (unitDraft.internal_notes || "").trim() || undefined,
       };
 
+      const activeUnitLocalFiles = Object.fromEntries(
+        Object.entries(unitLocalImageFiles).filter(([imageUrl]) => payload.images.includes(imageUrl)),
+      ) as LocalImageFileMap;
+
+      const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeUnitLocalFiles);
+
       if (unitEditingId) {
-        const updated = await updateUnit(unitEditingId, payload);
+        const newlyUploadedImages = await uploadUnitImageBlobUrls(
+          unitEditingId,
+          localBlobImages,
+          activeUnitLocalFiles,
+        );
+
+        if (localBlobImages.length > 0 && newlyUploadedImages.length === 0) {
+          throw new Error("Image upload did not complete. Please reselect images and try again.");
+        }
+
+        const allImages = [...uploadedImages, ...newlyUploadedImages];
+
+        const updated = await updateUnit(unitEditingId, {
+          ...payload,
+          images: allImages,
+          main_image: allImages[0],
+        });
+
         setUnits((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       } else {
-        const created = await createUnit(payload);
-        setUnits((prev) => [created, ...prev]);
+        const created = await createUnit({
+          ...payload,
+          images: uploadedImages,
+          main_image: uploadedImages[0],
+        });
+
+        const newlyUploadedImages = await uploadUnitImageBlobUrls(
+          created.id,
+          localBlobImages,
+          activeUnitLocalFiles,
+        );
+
+        if (localBlobImages.length > 0 && newlyUploadedImages.length === 0) {
+          throw new Error("Image upload did not complete. Please reselect images and try again.");
+        }
+
+        const allImages = [...uploadedImages, ...newlyUploadedImages];
+        let createdOrUpdated: Unit = created;
+
+        if (allImages.length > 0) {
+          createdOrUpdated = await updateUnit(created.id, {
+            ...payload,
+            images: allImages,
+            main_image: allImages[0],
+          });
+        }
+
+        setUnits((prev) => [createdOrUpdated, ...prev]);
       }
+
+      Object.keys(activeUnitLocalFiles).forEach((imageUrl) => {
+        if (imageUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(imageUrl);
+        }
+      });
+
+      setUnitLocalImageFiles({});
 
       closeUnitEditor();
     } catch (saveError) {
@@ -740,10 +821,6 @@ const ProjectForm = () => {
 
       if (!payload.area) {
         throw new Error("Area is required.");
-      }
-
-      if (!payload.internal_notes) {
-        throw new Error("Internal notes are required.");
       }
 
       const activeLocalFiles = Object.fromEntries(
@@ -1027,11 +1104,11 @@ const ProjectForm = () => {
                 <SelectContent>
                   <SelectItem value={OPTIONAL_LINK_NONE}>Unassigned</SelectItem>
                   {!hasOptionById(companies, form.assigned_company_id) && form.assigned_company_id ? (
-                    <SelectItem value={form.assigned_company_id}>Current: {form.assigned_company_id}</SelectItem>
+                    <SelectItem value={form.assigned_company_id}>Current assigned company</SelectItem>
                   ) : null}
                   {companies.map((company) => (
                     <SelectItem key={company.id} value={company.id}>
-                      {company.full_name} ({company.id})
+                      {company.company_name || company.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1372,6 +1449,47 @@ const ProjectForm = () => {
                       </div>
 
                       <div className="space-y-2 sm:col-span-2">
+                        <Label>Unit Images (Optional)</Label>
+                        <ImageUpload
+                          images={unitDraft.images || []}
+                          onLocalFilesAdded={(entries) => {
+                            setUnitLocalImageFiles((prev) => {
+                              const next = { ...prev };
+                              entries.forEach((entry) => {
+                                next[entry.url] = entry.file;
+                              });
+                              return next;
+                            });
+                          }}
+                          onChange={(images) => {
+                            const removedLocalUrls = (unitDraft.images || []).filter(
+                              (url) => url.startsWith("blob:") && !images.includes(url),
+                            );
+
+                            removedLocalUrls.forEach((imageUrl) => {
+                              URL.revokeObjectURL(imageUrl);
+                            });
+
+                            setUnitLocalImageFiles((prev) => {
+                              const next: LocalImageFileMap = {};
+                              images.forEach((imageUrl) => {
+                                if (prev[imageUrl]) {
+                                  next[imageUrl] = prev[imageUrl];
+                                }
+                              });
+                              return next;
+                            });
+
+                            setUnitDraft((prev) => ({
+                              ...prev,
+                              images,
+                              main_image: images[0] || undefined,
+                            }));
+                          }}
+                        />
+                      </div>
+
+                      <div className="space-y-2 sm:col-span-2">
                         <Label>Unit Notes (Optional)</Label>
                         <Textarea
                           value={unitDraft.internal_notes || ""}
@@ -1397,7 +1515,7 @@ const ProjectForm = () => {
 
           <FormSection title="Internal Notes">
             <div className="space-y-2">
-              <Label>Notes *</Label>
+              <Label>Notes (Optional)</Label>
               <Textarea
                 value={form.internal_notes || ""}
                 onChange={(e) => update("internal_notes", e.target.value)}

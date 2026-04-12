@@ -24,7 +24,6 @@ import { EmptyState } from "@/components/EmptyState";
 import {
   deleteProperty as deletePropertyById,
   getProperties as fetchProperties,
-  updateProperty as updatePropertyById,
 } from "@/modules/properties/property.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -35,27 +34,6 @@ type DeleteDialogState = {
   open: boolean;
   propertyIds: string[];
   subjectLabel: string;
-};
-
-const STATUS_META: Record<
-  Property["status"],
-  { label: string; dotClassName: string; triggerClassName: string }
-> = {
-  available: {
-    label: "Available",
-    dotClassName: "bg-emerald-500",
-    triggerClassName: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  },
-  sold: {
-    label: "Sold",
-    dotClassName: "bg-amber-500",
-    triggerClassName: "bg-amber-50 text-amber-800 border-amber-200",
-  },
-  archived: {
-    label: "Archived",
-    dotClassName: "bg-slate-500",
-    triggerClassName: "bg-slate-100 text-slate-700 border-slate-200",
-  },
 };
 
 const PROPERTIES_PAGE_SIZE = 10;
@@ -77,7 +55,6 @@ const PropertiesList = () => {
   const [maxPriceFilter, setMaxPriceFilter] = useState("");
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
   const [deletingPropertyIds, setDeletingPropertyIds] = useState<string[]>([]);
-  const [statusUpdatingPropertyIds, setStatusUpdatingPropertyIds] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
@@ -167,6 +144,23 @@ const PropertiesList = () => {
 
   const getTypeName = (id: string) => propertyTypes.find((type) => type.id === id)?.name || id;
   const getCityName = (id: string) => cities.find((city) => city.id === id)?.name || id;
+  const getListingTypeLabel = (listingType: string) => {
+    const normalized = listingType.replaceAll("_", " ").trim();
+    if (!normalized) {
+      return "Listing";
+    }
+
+    if (normalized.toLowerCase() === "sale") {
+      return "For Sale";
+    }
+
+    if (normalized.toLowerCase() === "rent") {
+      return "For Rent";
+    }
+
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  };
+
   const parseFilterNumber = (value: string) => {
     const normalized = value.replace(/[,_\s]/g, "").trim();
     if (!normalized) {
@@ -247,7 +241,6 @@ const PropertiesList = () => {
   const visiblePropertyIds = paginatedProperties.map((property) => property.id);
   const visiblePropertyIdSet = new Set(visiblePropertyIds);
   const deletingIdSet = new Set(deletingPropertyIds);
-  const statusUpdatingIdSet = new Set(statusUpdatingPropertyIds);
   const allVisibleSelected =
     visiblePropertyIds.length > 0 && visiblePropertyIds.every((id) => selectedIdSet.has(id));
   const someVisibleSelected =
@@ -300,14 +293,6 @@ const PropertiesList = () => {
   const unmarkDeletingIds = (ids: string[]) => {
     const idsToRemove = new Set(ids);
     setDeletingPropertyIds((current) => current.filter((id) => !idsToRemove.has(id)));
-  };
-
-  const markStatusUpdatingId = (id: string) => {
-    setStatusUpdatingPropertyIds((current) => (current.includes(id) ? current : [...current, id]));
-  };
-
-  const unmarkStatusUpdatingId = (id: string) => {
-    setStatusUpdatingPropertyIds((current) => current.filter((currentId) => currentId !== id));
   };
 
   const closeDeleteDialog = () => {
@@ -409,56 +394,6 @@ const PropertiesList = () => {
 
     await deletePropertiesByIds([...deleteDialog.propertyIds]);
     closeDeleteDialog();
-  }
-
-  async function handlePropertyStatusChange(property: Property, nextStatusValue: string) {
-    if (
-      nextStatusValue !== "available" &&
-      nextStatusValue !== "sold" &&
-      nextStatusValue !== "archived"
-    ) {
-      return;
-    }
-
-    const nextStatus = nextStatusValue as Property["status"];
-    if (property.status === nextStatus || statusUpdatingIdSet.has(property.id) || deletingIdSet.has(property.id)) {
-      return;
-    }
-
-    const previousStatus = property.status;
-    markStatusUpdatingId(property.id);
-    setError(null);
-
-    setProperties((current) =>
-      current.map((item) => (item.id === property.id ? { ...item, status: nextStatus } : item)),
-    );
-
-    try {
-      const { id: _id, ...propertyPayload } = property;
-      const updated = await updatePropertyById(property.id, {
-        ...propertyPayload,
-        status: nextStatus,
-      });
-
-      setProperties((current) => current.map((item) => (item.id === property.id ? updated : item)));
-      toast.success("Property status updated.");
-    } catch (updateError) {
-      setProperties((current) =>
-        current.map((item) => (item.id === property.id ? { ...item, status: previousStatus } : item)),
-      );
-
-      const message = updateError instanceof Error ? updateError.message : "Failed to update property status.";
-      setError(message);
-      toast.error(message, {
-        style: {
-          background: "hsl(var(--destructive))",
-          color: "hsl(var(--destructive-foreground))",
-          borderColor: "hsl(var(--destructive))",
-        },
-      });
-    } finally {
-      unmarkStatusUpdatingId(property.id);
-    }
   }
 
   return (
@@ -603,7 +538,8 @@ const PropertiesList = () => {
 
             <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
               {paginatedProperties.map((p) => {
-                const statusMeta = STATUS_META[p.status];
+                const cityName = getCityName(p.city_id);
+                const showCity = cityName.trim().length > 0 && !p.title.toLowerCase().includes(cityName.toLowerCase());
 
                 return (
                   <div
@@ -639,45 +575,33 @@ const PropertiesList = () => {
                     </div>
 
                     <div className="space-y-3 p-3">
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold">{p.title}</p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {getTypeName(p.type_id)} • {getCityName(p.city_id)}
-                          </p>
+                          <p className="truncate text-base font-semibold leading-tight">{p.title}</p>
+                          {showCity ? <p className="mt-1 truncate text-xs text-muted-foreground">{cityName}</p> : null}
                         </div>
-                        <p className="whitespace-nowrap text-sm font-semibold">
+                      </div>
+
+                      <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-primary/70">Price</p>
+                        <p className="mt-1 text-[30px] font-bold leading-none text-primary">
                           {p.currency} {p.price.toLocaleString()}
                         </p>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span className="rounded-md border bg-muted/30 px-2 py-1 capitalize">{p.listing_type}</span>
-                        <span>{p.bedrooms} bd</span>
-                        <span>{p.suit_rooms} sr</span>
-                        <span className="capitalize">{p.condition.replaceAll("_", " ")}</span>
-                      </div>
-
-                      <div onClick={(event) => event.stopPropagation()}>
-                        <Select
-                          value={p.status}
-                          onValueChange={(value) => {
-                            void handlePropertyStatusChange(p, value);
-                          }}
-                          disabled={deletingIdSet.has(p.id) || statusUpdatingIdSet.has(p.id)}
-                        >
-                          <SelectTrigger className={`h-8 w-full border ${statusMeta.triggerClassName}`}>
-                            <div className="flex items-center gap-2">
-                              <span className={`h-2 w-2 rounded-full ${statusMeta.dotClassName}`} />
-                              <SelectValue placeholder="Status" />
-                            </div>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="available">{STATUS_META.available.label}</SelectItem>
-                            <SelectItem value="sold">{STATUS_META.sold.label}</SelectItem>
-                            <SelectItem value="archived">{STATUS_META.archived.label}</SelectItem>
-                          </SelectContent>
-                        </Select>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                          {getListingTypeLabel(p.listing_type)}
+                        </span>
+                        <span className="rounded-full border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
+                          {p.bedrooms + p.suit_rooms} rooms
+                        </span>
+                        <span className="rounded-full border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
+                          {p.bedrooms} bed • {p.suit_rooms} suit
+                        </span>
+                        <span className="rounded-full border bg-muted/30 px-2.5 py-1 text-xs capitalize text-muted-foreground">
+                          {p.condition.replaceAll("_", " ")}
+                        </span>
                       </div>
 
                       <div className="flex items-center justify-end gap-1 pt-1" onClick={(event) => event.stopPropagation()}>
