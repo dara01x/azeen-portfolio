@@ -752,12 +752,6 @@ const PropertiesList = () => {
 
   return (
     <div>
-      <PageHeader
-        title="Properties"
-        description="Manage your property listings"
-        actions={<Button asChild><Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link></Button>}
-      />
-
       {storyError ? <p className="mb-4 text-sm text-destructive">{storyError}</p> : null}
 
       <Card className="mb-4">
@@ -822,6 +816,14 @@ const PropertiesList = () => {
           )}
         </div>
       </Card>
+
+      <div className="mt-6">
+        <PageHeader
+          title="Properties"
+          description="Manage your property listings"
+          actions={<Button asChild><Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link></Button>}
+        />
+      </div>
 
       {areaFilter !== "all" ? (
         <Card className="mb-4">
