@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Feature, FeatureCollection } from "geojson";
 import type { AreaBoundaryPoint } from "@/modules/app-variables/types";
+import { DUHOK_DEFAULT_CENTER } from "@/lib/constants/map";
 
 type MapLibreModule = typeof import("maplibre-gl");
 type MapLibreMap = import("maplibre-gl").Map;
@@ -19,7 +20,7 @@ export type AreaMapPropertyPoint = {
   priceLabel: string;
 };
 
-const DEFAULT_CENTER = { lat: 36.1911, lng: 44.0092 };
+const DEFAULT_CENTER = DUHOK_DEFAULT_CENTER;
 const DEFAULT_ZOOM = 11;
 const SINGLE_POINT_ZOOM = 15;
 const MARKER_COLOR = "#0f766e";
@@ -185,14 +186,17 @@ function createPopupContent(point: AreaMapPropertyPoint): HTMLDivElement {
 export function PropertiesAreaMap({
   points,
   areaBoundary,
+  focusCenter,
 }: {
   points: AreaMapPropertyPoint[];
   areaBoundary?: AreaBoundaryPoint[];
+  focusCenter?: AreaBoundaryPoint | null;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
+  const [mapReadyTick, setMapReadyTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -236,6 +240,7 @@ export function PropertiesAreaMap({
       };
 
       mapRef.current = map;
+      setMapReadyTick((value) => value + 1);
     }
 
     void initializeMap();
@@ -271,11 +276,16 @@ export function PropertiesAreaMap({
         (point) => isFiniteNumber(point.lat) && isFiniteNumber(point.lng),
       );
 
+      const validFocusCenter =
+        focusCenter && isFiniteNumber(focusCenter.lat) && isFiniteNumber(focusCenter.lng)
+          ? focusCenter
+          : null;
+
       ensureAreaBoundaryLayers(map);
       const source = map.getSource(AREA_SOURCE_ID) as GeoJsonSource | undefined;
       source?.setData(areaBoundaryFeatureCollection(validBoundary) as never);
 
-      if (validPoints.length === 0 && validBoundary.length === 0) {
+      if (validPoints.length === 0 && validBoundary.length === 0 && !validFocusCenter) {
         map.easeTo({
           center: toLngLat(DEFAULT_CENTER),
           zoom: DEFAULT_ZOOM,
@@ -291,6 +301,11 @@ export function PropertiesAreaMap({
         bounds.extend(toLngLat(point));
         allAnchors.push(point);
       });
+
+      if (validFocusCenter) {
+        bounds.extend(toLngLat(validFocusCenter));
+        allAnchors.push(validFocusCenter);
+      }
 
       validPoints.forEach((point) => {
         const marker = new maplibre.Marker({ color: MARKER_COLOR })
@@ -325,7 +340,7 @@ export function PropertiesAreaMap({
     }
 
     syncMapPoints();
-  }, [points, areaBoundary]);
+  }, [points, areaBoundary, focusCenter, mapReadyTick]);
 
   return (
     <div className="h-[26rem] w-full overflow-hidden rounded-xl border shadow-sm">

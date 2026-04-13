@@ -95,6 +95,20 @@ function normalizeAreaBoundaryPoints(points?: AreaBoundaryPoint[]) {
   );
 }
 
+function normalizeAreaCenterPoint(point?: AreaBoundaryPoint | null) {
+  if (
+    !point ||
+    typeof point.lat !== "number" ||
+    !Number.isFinite(point.lat) ||
+    typeof point.lng !== "number" ||
+    !Number.isFinite(point.lng)
+  ) {
+    return null;
+  }
+
+  return point;
+}
+
 function isPointInsidePolygon(point: AreaBoundaryPoint, polygon: AreaBoundaryPoint[]) {
   if (polygon.length < 3) {
     return false;
@@ -330,6 +344,7 @@ const PropertiesList = () => {
   const selectedAreaItem =
     areaFilter === "all" ? null : areas.find((area) => area.name === areaFilter) || null;
   const selectedAreaBoundary = normalizeAreaBoundaryPoints(selectedAreaItem?.area_boundary);
+  const selectedAreaCenter = normalizeAreaCenterPoint(selectedAreaItem?.area_center);
   const useBoundaryAreaFiltering = selectedAreaBoundary.length >= 3;
 
   const propertyMatchesSelectedArea = (property: Property) => {
@@ -817,8 +832,12 @@ const PropertiesList = () => {
             </p>
           </div>
           <div className="p-4">
-            {areaMapPoints.length > 0 || selectedAreaBoundary.length >= 3 ? (
-              <PropertiesAreaMap points={areaMapPoints} areaBoundary={selectedAreaBoundary} />
+            {areaMapPoints.length > 0 || selectedAreaBoundary.length >= 3 || selectedAreaCenter ? (
+              <PropertiesAreaMap
+                points={areaMapPoints}
+                areaBoundary={selectedAreaBoundary}
+                focusCenter={selectedAreaCenter}
+              />
             ) : (
               <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
                 No exact property coordinates available in this area yet. Add latitude/longitude in property details to show pins here.

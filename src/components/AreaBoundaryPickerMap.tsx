@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { Feature, FeatureCollection } from "geojson";
 import type { AreaBoundaryPoint } from "@/modules/app-variables/types";
+import { DUHOK_DEFAULT_CENTER } from "@/lib/constants/map";
 
 type MapLibreModule = typeof import("maplibre-gl");
 type MapLibreMap = import("maplibre-gl").Map;
@@ -10,7 +11,7 @@ type MapLibreMarker = import("maplibre-gl").Marker;
 type GeoJsonSource = import("maplibre-gl").GeoJSONSource;
 type MapLibreStyle = import("maplibre-gl").StyleSpecification;
 
-const DEFAULT_CENTER = { lat: 36.1911, lng: 44.0092 };
+const DEFAULT_CENTER = DUHOK_DEFAULT_CENTER;
 const DEFAULT_ZOOM = 11;
 const SINGLE_POINT_ZOOM = 14;
 const SOURCE_ID = "area-boundary-source";

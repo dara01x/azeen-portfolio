@@ -24,6 +24,7 @@ import { getPropertyById } from "@/modules/properties/property.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { getUsers as fetchUsers } from "@/modules/users/user.client";
 import { useAuth } from "@/lib/auth/useAuth";
+import { DUHOK_DEFAULT_CENTER } from "@/lib/constants/map";
 import type { Property, User } from "@/types";
 import type { AppVariableItem } from "@/modules/app-variables/types";
 
@@ -36,15 +37,8 @@ function GoogleMapPreview({
 }: {
   coordinates: { lat: number; lng: number } | null;
 }) {
-  if (!coordinates) {
-    return (
-      <div className="h-72 md:h-80 w-full rounded-xl border bg-muted/40 flex items-center justify-center text-sm text-muted-foreground">
-        No coordinates available.
-      </div>
-    );
-  }
-
-  const coordinateQuery = `${coordinates.lat},${coordinates.lng}`;
+  const mapCoordinates = coordinates || DUHOK_DEFAULT_CENTER;
+  const coordinateQuery = `${mapCoordinates.lat},${mapCoordinates.lng}`;
   const googleMapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(
     coordinateQuery,
   )}&z=16&output=embed`;

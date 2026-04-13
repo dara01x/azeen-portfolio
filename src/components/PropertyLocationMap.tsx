@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MutableRefObject } from "react";
+import { DUHOK_DEFAULT_CENTER } from "@/lib/constants/map";
 
 type MapLibreModule = typeof import("maplibre-gl");
 type MapLibreMap = import("maplibre-gl").Map;
@@ -13,7 +14,7 @@ export type PropertyCoordinates = {
   lng: number;
 };
 
-const DEFAULT_CENTER: PropertyCoordinates = { lat: 36.1911, lng: 44.0092 };
+const DEFAULT_CENTER: PropertyCoordinates = DUHOK_DEFAULT_CENTER;
 const MARKER_COLOR = "#ef4444";
 const DEFAULT_ZOOM = 12;
 const SELECTED_ZOOM = 15;
@@ -572,14 +573,6 @@ export function PropertyLocationPreviewMap({
 }: {
   coordinates: PropertyCoordinates | null;
 }) {
-  if (!coordinates) {
-    return (
-      <div className="h-72 md:h-80 w-full rounded-xl border bg-muted/40 flex items-center justify-center text-sm text-muted-foreground">
-        No coordinates available.
-      </div>
-    );
-  }
-
   return (
     <div className="h-72 md:h-80 w-full overflow-hidden rounded-xl border shadow-sm">
       <MapLibreCanvas coordinates={coordinates} interactive={false} heightClass="h-72 md:h-80" />
