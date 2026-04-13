@@ -14,6 +14,9 @@ type MapLibreStyle = import("maplibre-gl").StyleSpecification;
 const DEFAULT_CENTER = DUHOK_DEFAULT_CENTER;
 const DEFAULT_ZOOM = 11;
 const SINGLE_POINT_ZOOM = 14;
+const CURRENT_LOCATION_ZOOM = 16;
+const GEOLOCATION_TIMEOUT_MS = 7000;
+const GEOLOCATION_MAX_AGE_MS = 300000;
 const SOURCE_ID = "area-boundary-source";
 const FILL_LAYER_ID = "area-boundary-fill";
 const LINE_LAYER_ID = "area-boundary-line";
@@ -191,6 +194,23 @@ export function AreaBoundaryPickerMap({
       });
 
       map.addControl(new maplibre.NavigationControl({ showCompass: true, showZoom: true }), "top-right");
+      map.addControl(
+        new maplibre.GeolocateControl({
+          positionOptions: {
+            enableHighAccuracy: false,
+            timeout: GEOLOCATION_TIMEOUT_MS,
+            maximumAge: GEOLOCATION_MAX_AGE_MS,
+          },
+          trackUserLocation: false,
+          showUserLocation: true,
+          showAccuracyCircle: false,
+          fitBoundsOptions: {
+            maxZoom: CURRENT_LOCATION_ZOOM,
+            duration: 700,
+          },
+        }),
+        "top-left",
+      );
 
       map.on("load", () => {
         ensureBoundaryLayers(map);

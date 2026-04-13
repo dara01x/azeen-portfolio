@@ -204,63 +204,65 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              {isAreaType ? <TableHead className="w-[160px]">Map Boundary</TableHead> : null}
-              <TableHead className="w-[140px] text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.length === 0 ? (
-              <TableRow>
-                <TableCell className="text-sm text-muted-foreground" colSpan={isAreaType ? 3 : 2}>No values yet.</TableCell>
-              </TableRow>
-            ) : items.map(item => (
-              <TableRow key={item.id}>
-                <TableCell>{item.name}</TableCell>
-                {isAreaType ? (
-                  <TableCell>
-                    {normalizeAreaBoundaryPoints(item.area_boundary).length >= MIN_AREA_BOUNDARY_POINTS ? (
-                      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                        Set
-                      </span>
-                    ) : (
-                      <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                        Missing
-                      </span>
-                    )}
-                  </TableCell>
-                ) : null}
-                <TableCell>
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2"
-                      onClick={() => openEdit(item)}
-                      disabled={authLoading || !user}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-destructive hover:text-destructive"
-                      onClick={() => openDelete(item)}
-                      disabled={authLoading || !user}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+          <div className="space-y-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  {isAreaType ? <TableHead className="w-[160px]">Map Boundary</TableHead> : null}
+                  <TableHead className="w-[140px] text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.length === 0 ? (
+                  <TableRow>
+                    <TableCell className="text-sm text-muted-foreground" colSpan={isAreaType ? 3 : 2}>No values yet.</TableCell>
+                  </TableRow>
+                ) : items.map(item => (
+                  <TableRow key={item.id}>
+                    <TableCell>{item.name}</TableCell>
+                    {isAreaType ? (
+                      <TableCell>
+                        {normalizeAreaBoundaryPoints(item.area_boundary).length >= MIN_AREA_BOUNDARY_POINTS ? (
+                          <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            Set
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                            Missing
+                          </span>
+                        )}
+                      </TableCell>
+                    ) : null}
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2"
+                          onClick={() => openEdit(item)}
+                          disabled={authLoading || !user}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-destructive hover:text-destructive"
+                          onClick={() => openDelete(item)}
+                          disabled={authLoading || !user}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
       <Dialog

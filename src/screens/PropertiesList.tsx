@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { PropertiesAreaMap, type AreaMapPropertyPoint } from "@/components/PropertiesAreaMap";
+import { AreasOverviewMap } from "@/components/AreasOverviewMap";
 import {
   deleteProperty as deletePropertyById,
   getProperties as fetchProperties,
@@ -495,6 +496,11 @@ const PropertiesList = () => {
           ];
         });
 
+  const areasWithBoundary = useMemo(
+    () => areas.filter((area) => normalizeAreaBoundaryPoints(area.area_boundary).length >= 3),
+    [areas],
+  );
+
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -964,6 +970,43 @@ const PropertiesList = () => {
         />
       </div>
 
+      <Card className="mb-4">
+        <div className="flex flex-col gap-3 border-b px-4 py-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-base font-semibold">All Areas Overview</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Use this map to filter by area. Click a labeled section on the map or choose from the selector.
+            </p>
+          </div>
+
+          <div className="w-full md:w-[260px]">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Area Filter</p>
+            <Select value={areaFilter} onValueChange={setAreaFilter}>
+              <SelectTrigger className="h-9 bg-muted/50 border-0">
+                <SelectValue placeholder="Area" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Areas</SelectItem>
+                {areas.map((area) => <SelectItem key={area.id} value={area.name}>{area.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="p-4">
+          {areasWithBoundary.length > 0 ? (
+            <AreasOverviewMap
+              areas={areas}
+              selectedAreaName={areaFilter}
+              onAreaSelect={setAreaFilter}
+            />
+          ) : (
+            <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+              No area boundaries are configured yet. Add boundaries in App Variables - Areas.
+            </div>
+          )}
+        </div>
+      </Card>
+
       {areaFilter !== "all" ? (
         <Card className="mb-4">
           <div className="border-b px-4 py-4">
@@ -1034,15 +1077,8 @@ const PropertiesList = () => {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Area</p>
-                  <Select value={areaFilter} onValueChange={setAreaFilter}>
-                    <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Area" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Areas</SelectItem>
-                      {areas.map((area) => <SelectItem key={area.id} value={area.name}>{area.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  Area filter is controlled from the All Areas Overview map above.
                 </div>
 
                 <div className="space-y-2">
