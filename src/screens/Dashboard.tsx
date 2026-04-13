@@ -8,11 +8,12 @@ import { useAuth } from "@/lib/auth/useAuth";
 import { getProperties } from "@/modules/properties/property.client";
 import { getProjects } from "@/modules/projects/project.client";
 import { getClients } from "@/modules/clients/client.client";
-import { createStory, getStories, uploadStoryVideo } from "@/modules/stories/story.client";
+import { createStory, getStories, uploadStoryMedia } from "@/modules/stories/story.client";
 import { PageHeader } from "@/components/PageHeader";
 import type { Client, Project, Property, Story } from "@/types";
 
 const MAX_STORY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024;
+const MAX_STORY_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 
 type StoryGroup = {
   created_by_uid: string;
@@ -51,6 +52,42 @@ function formatStoryAge(value: string | null | undefined): string {
 
   const diffHours = Math.floor(diffMinutes / 60);
   return `${diffHours}h ago`;
+}
+
+function resolveStoryMedia(story: Story): { type: "video" | "image"; url: string } | null {
+  const mediaType = story.media_type;
+  const mediaUrl = (story.media_url || "").trim();
+  const imageUrl = (story.image_url || "").trim();
+  const videoUrl = (story.video_url || "").trim();
+
+  if (mediaType === "image") {
+    const resolvedUrl = mediaUrl || imageUrl;
+    return resolvedUrl ? { type: "image", url: resolvedUrl } : null;
+  }
+
+  if (mediaType === "video") {
+    const resolvedUrl = mediaUrl || videoUrl;
+    return resolvedUrl ? { type: "video", url: resolvedUrl } : null;
+  }
+
+  if (imageUrl && !videoUrl) {
+    return { type: "image", url: imageUrl };
+  }
+
+  if (videoUrl) {
+    return { type: "video", url: videoUrl };
+  }
+
+  if (mediaUrl) {
+    const lowerMediaUrl = mediaUrl.toLowerCase();
+    const looksLikeImage = /\.(png|jpe?g|gif|webp|avif|heic|heif)(\?|#|$)/.test(lowerMediaUrl);
+    return {
+      type: looksLikeImage ? "image" : "video",
+      url: mediaUrl,
+    };
+  }
+
+  return null;
 }
 
 const Dashboard = () => {
@@ -230,13 +267,21 @@ const Dashboard = () => {
       return;
     }
 
-    if (!selectedFile.type.startsWith("video/")) {
-      setStoryError("Please select a video file for stories.");
+    const isVideo = selectedFile.type.startsWith("video/");
+    const isImage = selectedFile.type.startsWith("image/");
+
+    if (!isVideo && !isImage) {
+      setStoryError("Please select an image or video file for stories.");
       return;
     }
 
-    if (selectedFile.size > MAX_STORY_VIDEO_SIZE_BYTES) {
+    if (isVideo && selectedFile.size > MAX_STORY_VIDEO_SIZE_BYTES) {
       setStoryError("Story video must be 30MB or less.");
+      return;
+    }
+
+    if (isImage && selectedFile.size > MAX_STORY_IMAGE_SIZE_BYTES) {
+      setStoryError("Story image must be 10MB or less.");
       return;
     }
 
@@ -244,8 +289,14 @@ const Dashboard = () => {
     setStoryError(null);
 
     try {
-      const videoUrl = await uploadStoryVideo(selectedFile);
-      const createdStory = await createStory({ video_url: videoUrl });
+      const uploadedStoryMedia = await uploadStoryMedia(selectedFile);
+      const createdStory = await createStory({
+        media_url: uploadedStoryMedia.url,
+        media_type: uploadedStoryMedia.media_type,
+        ...(uploadedStoryMedia.media_type === "video"
+          ? { video_url: uploadedStoryMedia.url }
+          : { image_url: uploadedStoryMedia.url }),
+      });
 
       setStories((current) =>
         [createdStory, ...current].sort(
@@ -256,7 +307,7 @@ const Dashboard = () => {
       const message =
         storyUploadError instanceof Error
           ? storyUploadError.message
-          : "Failed to upload story video.";
+          : "Failed to upload story media.";
       setStoryError(message);
     } finally {
       setUploadingStory(false);
@@ -306,7 +357,7 @@ const Dashboard = () => {
           <input
             ref={storyInputRef}
             type="file"
-            accept="video/*"
+            accept="image/*,video/*"
             className="hidden"
             onChange={(event) => {
               void handleStoryFileSelected(event);
@@ -318,37 +369,53 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground">No active stories yet.</p>
           ) : (
             <div className="flex gap-4 overflow-x-auto pb-2">
-              {storyGroups.map((group) => (
-                <button
-                  key={group.created_by_uid || group.latest_story.id}
-                  type="button"
-                  className="shrink-0 text-left"
-                  onClick={() => openStoryViewer(group)}
-                >
-                  <span className="relative block h-20 w-20 rounded-full bg-gradient-to-br from-primary/80 via-rose-400 to-amber-400 p-[2px]">
-                    <span className="block h-full w-full overflow-hidden rounded-full bg-black">
-                      <video
-                        src={group.latest_story.video_url}
-                        className="h-full w-full object-cover"
-                        muted
-                        playsInline
-                        preload="metadata"
-                      />
-                    </span>
-                    {group.stories.length > 1 ? (
-                      <span className="absolute bottom-0 right-0 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-background px-1 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                        {group.stories.length}
+              {storyGroups.map((group) => {
+                const previewMedia = resolveStoryMedia(group.latest_story);
+
+                return (
+                  <button
+                    key={group.created_by_uid || group.latest_story.id}
+                    type="button"
+                    className="shrink-0 text-left"
+                    onClick={() => openStoryViewer(group)}
+                  >
+                    <span className="relative block h-20 w-20 rounded-full bg-gradient-to-br from-primary/80 via-rose-400 to-amber-400 p-[2px]">
+                      <span className="block h-full w-full overflow-hidden rounded-full bg-black">
+                        {previewMedia?.type === "image" ? (
+                          <img
+                            src={previewMedia.url}
+                            alt={`${group.created_by_name} story`}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : previewMedia?.type === "video" ? (
+                          <video
+                            src={previewMedia.url}
+                            className="h-full w-full object-cover"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-[11px] font-semibold uppercase text-white/80">
+                            {group.created_by_name.slice(0, 2)}
+                          </span>
+                        )}
                       </span>
-                    ) : null}
-                  </span>
-                  <span className="mt-2 block max-w-[84px] truncate text-xs font-medium">
-                    {group.created_by_name}
-                  </span>
-                  <span className="block text-[11px] text-muted-foreground">
-                    {formatStoryAge(group.latest_story.created_at)}
-                  </span>
-                </button>
-              ))}
+                      {group.stories.length > 1 ? (
+                        <span className="absolute bottom-0 right-0 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-background px-1 text-[10px] font-semibold text-foreground ring-1 ring-border">
+                          {group.stories.length}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-2 block max-w-[84px] truncate text-xs font-medium">
+                      {group.created_by_name}
+                    </span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      {formatStoryAge(group.latest_story.created_at)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -413,19 +480,27 @@ const Dashboard = () => {
                 Story from {currentDialogStory.created_by_name}
               </DialogDescription>
               <div className="bg-black">
-                <video
-                  key={currentDialogStory.id}
-                  src={currentDialogStory.video_url}
-                  controls
-                  autoPlay
-                  playsInline
-                  className="max-h-[70vh] w-full bg-black"
-                  onEnded={() => {
-                    if (canGoNextStory) {
-                      goToNextStory();
-                    }
-                  }}
-                />
+                {resolveStoryMedia(currentDialogStory)?.type === "image" ? (
+                  <img
+                    src={resolveStoryMedia(currentDialogStory)?.url}
+                    alt={`${currentDialogStory.created_by_name} story`}
+                    className="max-h-[70vh] w-full bg-black object-cover"
+                  />
+                ) : (
+                  <video
+                    key={currentDialogStory.id}
+                    src={resolveStoryMedia(currentDialogStory)?.url}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="max-h-[70vh] w-full bg-black"
+                    onEnded={() => {
+                      if (canGoNextStory) {
+                        goToNextStory();
+                      }
+                    }}
+                  />
+                )}
               </div>
               <div className="px-4 pb-4">
                 <p className="text-sm font-semibold">{activeStoryGroup?.created_by_name}</p>

@@ -47,6 +47,9 @@ export interface User {
 export interface Story {
   id: string;
   video_url: string;
+  image_url?: string;
+  media_url?: string;
+  media_type?: "video" | "image";
   created_by_uid: string;
   created_by_name: string;
   created_by_role: "admin" | "company";

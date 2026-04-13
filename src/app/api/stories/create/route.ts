@@ -23,7 +23,11 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create story.";
 
-    if (message === "Story video URL is required." || message === "Story video URL must be a valid HTTP(S) URL.") {
+    if (
+      message === "Story media URL is required." ||
+      message === "Story media URL must be a valid HTTP(S) URL." ||
+      message === "Story media type is invalid."
+    ) {
       return NextResponse.json(
         {
           success: false,

@@ -6,6 +6,21 @@ import { requireApiUser } from "@/modules/properties/property.api-auth";
 export const runtime = "nodejs";
 
 const MAX_STORY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024;
+const MAX_STORY_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+
+type StoryUploadMediaType = "video" | "image";
+
+function detectMediaType(contentType: string): StoryUploadMediaType | null {
+  if (contentType.startsWith("video/")) {
+    return "video";
+  }
+
+  if (contentType.startsWith("image/")) {
+    return "image";
+  }
+
+  return null;
+}
 
 function extensionFromMimeType(contentType: string) {
   if (contentType.includes("mp4")) {
@@ -22,6 +37,34 @@ function extensionFromMimeType(contentType: string) {
 
   if (contentType.includes("x-matroska")) {
     return "mkv";
+  }
+
+  if (contentType.includes("jpeg") || contentType.includes("jpg")) {
+    return "jpg";
+  }
+
+  if (contentType.includes("png")) {
+    return "png";
+  }
+
+  if (contentType.includes("webp")) {
+    return "webp";
+  }
+
+  if (contentType.includes("gif")) {
+    return "gif";
+  }
+
+  if (contentType.includes("avif")) {
+    return "avif";
+  }
+
+  if (contentType.includes("heic")) {
+    return "heic";
+  }
+
+  if (contentType.includes("heif")) {
+    return "heif";
   }
 
   return "mp4";
@@ -59,20 +102,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const videoFile = fileValue as File;
-    const contentType = videoFile.type || "application/octet-stream";
+    const mediaFile = fileValue as File;
+    const contentType = mediaFile.type || "application/octet-stream";
+    const mediaType = detectMediaType(contentType);
 
-    if (!contentType.startsWith("video/")) {
+    if (!mediaType) {
       return NextResponse.json(
         {
           success: false,
-          error: "Only video files are allowed for stories.",
+          error: "Only image or video files are allowed for stories.",
         },
         { status: 400 },
       );
     }
 
-    if (videoFile.size > MAX_STORY_VIDEO_SIZE_BYTES) {
+    if (mediaType === "video" && mediaFile.size > MAX_STORY_VIDEO_SIZE_BYTES) {
       return NextResponse.json(
         {
           success: false,
@@ -82,12 +126,22 @@ export async function POST(request: Request) {
       );
     }
 
+    if (mediaType === "image" && mediaFile.size > MAX_STORY_IMAGE_SIZE_BYTES) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Story image must be 10MB or less.",
+        },
+        { status: 400 },
+      );
+    }
+
     const bucket = getAdminStorageBucket();
-    const safeName = sanitizeBaseName(videoFile.name || "story-video");
+    const safeName = sanitizeBaseName(mediaFile.name || "story-media");
     const extension = extensionFromMimeType(contentType);
-    const objectPath = `stories/${actor.uid}/${Date.now()}-${randomUUID()}-${safeName}.${extension}`;
+    const objectPath = `stories/${actor.uid}/${mediaType}/${Date.now()}-${randomUUID()}-${safeName}.${extension}`;
     const downloadToken = randomUUID();
-    const buffer = Buffer.from(await videoFile.arrayBuffer());
+    const buffer = Buffer.from(await mediaFile.arrayBuffer());
 
     await bucket.file(objectPath).save(buffer, {
       resumable: false,
@@ -104,11 +158,12 @@ export async function POST(request: Request) {
       {
         success: true,
         url: toFirebaseDownloadUrl(bucket.name, objectPath, downloadToken),
+        media_type: mediaType,
       },
       { status: 201 },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to upload story video.";
+    const message = error instanceof Error ? error.message : "Failed to upload story media.";
     const status = message === "Unauthorized" || message === "Unauthorized." ? 401 : 500;
 
     return NextResponse.json(

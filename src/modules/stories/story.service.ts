@@ -1,8 +1,10 @@
 import { Timestamp } from "firebase-admin/firestore";
-import { getAdminDb } from "@/lib/firebase/admin";
+import { getAdminDb, getAdminStorageBucket } from "@/lib/firebase/admin";
 import type { Story } from "@/types";
 
 type StoryWriteInput = Partial<Story>;
+
+type StoryMediaType = "video" | "image";
 
 type StoryActor = {
   uid: string;
@@ -33,6 +35,95 @@ function parseIsoTime(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function asUniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function safeDecodeURIComponent(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function tryParseStorageObjectPath(urlValue: string, bucketName: string): string | null {
+  const value = urlValue.trim();
+  if (!value) {
+    return null;
+  }
+
+  if (value.startsWith("gs://")) {
+    const withoutPrefix = value.slice("gs://".length);
+    const firstSlash = withoutPrefix.indexOf("/");
+    if (firstSlash <= 0) {
+      return null;
+    }
+
+    const parsedBucketName = withoutPrefix.slice(0, firstSlash);
+    if (parsedBucketName !== bucketName) {
+      return null;
+    }
+
+    return withoutPrefix.slice(firstSlash + 1);
+  }
+
+  try {
+    const parsedUrl = new URL(value);
+
+    if (parsedUrl.hostname === "firebasestorage.googleapis.com") {
+      const matched = parsedUrl.pathname.match(/^\/v0\/b\/([^/]+)\/o\/(.+)$/);
+      if (!matched) {
+        return null;
+      }
+
+      const parsedBucketName = safeDecodeURIComponent(matched[1]);
+      if (parsedBucketName !== bucketName) {
+        return null;
+      }
+
+      return safeDecodeURIComponent(matched[2]);
+    }
+
+    if (parsedUrl.hostname === "storage.googleapis.com") {
+      const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+      if (pathParts.length < 2) {
+        return null;
+      }
+
+      const parsedBucketName = pathParts[0];
+      if (parsedBucketName !== bucketName) {
+        return null;
+      }
+
+      return safeDecodeURIComponent(pathParts.slice(1).join("/"));
+    }
+
+    const storageHostSuffix = ".storage.googleapis.com";
+    if (parsedUrl.hostname.endsWith(storageHostSuffix)) {
+      const parsedBucketName = parsedUrl.hostname.slice(0, -storageHostSuffix.length);
+      if (parsedBucketName !== bucketName) {
+        return null;
+      }
+
+      return safeDecodeURIComponent(parsedUrl.pathname.replace(/^\/+/, ""));
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function isNotFoundStorageError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return message.includes("no such object") || message.includes("not found") || message.includes("404");
+}
+
+function normalizeStoryMediaType(value: unknown): StoryMediaType | null {
+  return value === "image" || value === "video" ? value : null;
+}
+
 function normalizeActorRole(value: unknown): Story["created_by_role"] | null {
   if (value === "admin" || value === "company") {
     return value;
@@ -49,15 +140,72 @@ function normalizeActorStatus(value: unknown): "active" | "disabled" {
   return value === "disabled" ? "disabled" : "active";
 }
 
-function validateStoryVideoUrl(videoUrl: string) {
-  if (!videoUrl) {
-    throw new Error("Story video URL is required.");
+function validateStoryMediaUrl(mediaUrl: string) {
+  if (!mediaUrl) {
+    throw new Error("Story media URL is required.");
   }
 
-  const isHttpUrl = videoUrl.startsWith("http://") || videoUrl.startsWith("https://");
+  const isHttpUrl = mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://");
 
   if (!isHttpUrl) {
-    throw new Error("Story video URL must be a valid HTTP(S) URL.");
+    throw new Error("Story media URL must be a valid HTTP(S) URL.");
+  }
+}
+
+function resolveStoryMediaFromInput(data: StoryWriteInput) {
+  const requestedMediaType = normalizeStoryMediaType(data.media_type);
+  const mediaUrl = asString(data.media_url).trim();
+  const imageUrl = asString(data.image_url).trim();
+  const videoUrl = asString(data.video_url).trim();
+
+  const mediaType = requestedMediaType || (imageUrl ? "image" : videoUrl ? "video" : null);
+  if (!mediaType) {
+    throw new Error("Story media type is invalid.");
+  }
+
+  const resolvedMediaUrl = mediaUrl || (mediaType === "image" ? imageUrl : videoUrl);
+  validateStoryMediaUrl(resolvedMediaUrl);
+
+  return {
+    mediaType,
+    mediaUrl: resolvedMediaUrl,
+    videoUrl: mediaType === "video" ? resolvedMediaUrl : "",
+    imageUrl: mediaType === "image" ? resolvedMediaUrl : "",
+  };
+}
+
+function extractStoryMediaUrls(data: Record<string, unknown>) {
+  return asUniqueStrings([
+    asString(data.media_url),
+    asString(data.video_url),
+    asString(data.image_url),
+  ]);
+}
+
+async function cleanupExpiredStories(now: Timestamp) {
+  const db = getAdminDb();
+  const bucket = getAdminStorageBucket();
+  const snapshot = await db.collection("stories").where("expires_at", "<=", now).get();
+
+  for (const storyDoc of snapshot.docs) {
+    const storyData = storyDoc.data() || {};
+    const mediaObjectPaths = asUniqueStrings(
+      extractStoryMediaUrls(storyData)
+        .map((urlValue) => tryParseStorageObjectPath(urlValue, bucket.name) || "")
+        .filter(Boolean),
+    );
+
+    for (const objectPath of mediaObjectPaths) {
+      try {
+        await bucket.file(objectPath).delete({ ignoreNotFound: true });
+      } catch (error) {
+        if (!isNotFoundStorageError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    await storyDoc.ref.delete();
   }
 }
 
@@ -66,9 +214,22 @@ function mapDocToStoryRecord(id: string, data: Record<string, unknown>): Story {
   const expires_at =
     toIso(data.expires_at) || new Date(Date.now() + STORY_DURATION_MS).toISOString();
 
+  const storedMediaType = normalizeStoryMediaType(data.media_type);
+  const storedMediaUrl = asString(data.media_url).trim();
+  const storedVideoUrl = asString(data.video_url).trim();
+  const storedImageUrl = asString(data.image_url).trim();
+
+  const media_type = storedMediaType || (storedImageUrl ? "image" : "video");
+  const media_url = storedMediaUrl || (media_type === "image" ? storedImageUrl : storedVideoUrl);
+  const video_url = media_type === "video" ? storedVideoUrl || media_url : "";
+  const image_url = media_type === "image" ? storedImageUrl || media_url : "";
+
   return {
     id,
-    video_url: asString(data.video_url).trim(),
+    video_url,
+    image_url: image_url || undefined,
+    media_type,
+    media_url: media_url || undefined,
     created_by_uid: asString(data.created_by_uid).trim(),
     created_by_name: asString(data.created_by_name).trim() || "User",
     created_by_role: normalizeActorRole(data.created_by_role) || "admin",
@@ -116,16 +277,17 @@ export async function createStory(actorUid: string, data: StoryWriteInput): Prom
   }
 
   const actor = await getStoryActor(actorUid);
-  const videoUrl = asString(data.video_url).trim();
-
-  validateStoryVideoUrl(videoUrl);
+  const storyMedia = resolveStoryMediaFromInput(data);
 
   const db = getAdminDb();
   const now = Timestamp.now();
   const expiresAt = Timestamp.fromMillis(now.toMillis() + STORY_DURATION_MS);
 
   const payload = {
-    video_url: videoUrl,
+    media_type: storyMedia.mediaType,
+    media_url: storyMedia.mediaUrl,
+    video_url: storyMedia.videoUrl,
+    image_url: storyMedia.imageUrl,
     created_by_uid: actor.uid,
     created_by_name: actor.full_name,
     created_by_role: actor.role,
@@ -143,11 +305,13 @@ export async function getActiveStories(): Promise<Story[]> {
   const db = getAdminDb();
   const now = Timestamp.now();
 
+  await cleanupExpiredStories(now);
+
   const snapshot = await db.collection("stories").where("expires_at", ">", now).get();
 
   const stories = snapshot.docs
     .map((doc) => mapDocToStoryRecord(doc.id, doc.data()))
-    .filter((story) => !!story.video_url);
+    .filter((story) => !!((story.media_url || story.video_url || story.image_url || "").trim()));
 
   return stories.sort((a, b) => parseIsoTime(b.created_at) - parseIsoTime(a.created_at));
 }

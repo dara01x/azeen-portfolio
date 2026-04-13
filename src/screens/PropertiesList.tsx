@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
+import { Plus, RotateCcw, Search, SlidersHorizontal, Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -27,7 +27,7 @@ import {
   deleteProperty as deletePropertyById,
   getProperties as fetchProperties,
 } from "@/modules/properties/property.client";
-import { createStory, getStories, uploadStoryVideo } from "@/modules/stories/story.client";
+import { createStory, getStories, uploadStoryMedia } from "@/modules/stories/story.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
 import type { Property, Story } from "@/types";
@@ -41,6 +41,8 @@ type DeleteDialogState = {
 
 const PROPERTIES_PAGE_SIZE = 10;
 const MAX_STORY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024;
+const MAX_STORY_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const IMAGE_STORY_DURATION_MS = 6000;
 
 type StoryGroup = {
   created_by_uid: string;
@@ -79,6 +81,56 @@ function formatStoryAge(value: string | null | undefined): string {
 
   const diffHours = Math.floor(diffMinutes / 60);
   return `${diffHours}h ago`;
+}
+
+function buildInitials(value: string) {
+  const parts = value
+    .split(" ")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return "ST";
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() || "").join("");
+}
+
+function resolveStoryMedia(story: Story): { type: "video" | "image"; url: string } | null {
+  const mediaType = story.media_type;
+  const mediaUrl = (story.media_url || "").trim();
+  const imageUrl = (story.image_url || "").trim();
+  const videoUrl = (story.video_url || "").trim();
+
+  if (mediaType === "image") {
+    const resolvedUrl = mediaUrl || imageUrl;
+    return resolvedUrl ? { type: "image", url: resolvedUrl } : null;
+  }
+
+  if (mediaType === "video") {
+    const resolvedUrl = mediaUrl || videoUrl;
+    return resolvedUrl ? { type: "video", url: resolvedUrl } : null;
+  }
+
+  if (imageUrl && !videoUrl) {
+    return { type: "image", url: imageUrl };
+  }
+
+  if (videoUrl) {
+    return { type: "video", url: videoUrl };
+  }
+
+  if (mediaUrl) {
+    const lowerMediaUrl = mediaUrl.toLowerCase();
+    const looksLikeImage = /\.(png|jpe?g|gif|webp|avif|heic|heif)(\?|#|$)/.test(lowerMediaUrl);
+    return {
+      type: looksLikeImage ? "image" : "video",
+      url: mediaUrl,
+    };
+  }
+
+  return null;
 }
 
 function normalizeAreaBoundaryPoints(points?: AreaBoundaryPoint[]) {
@@ -139,6 +191,7 @@ const PropertiesList = () => {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const storyInputRef = useRef<HTMLInputElement | null>(null);
+  const storyVideoRef = useRef<HTMLVideoElement | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,6 +201,9 @@ const PropertiesList = () => {
   const [storyDialogOpen, setStoryDialogOpen] = useState(false);
   const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
+  const [storyPlaybackProgress, setStoryPlaybackProgress] = useState(0);
+  const [storyMuted, setStoryMuted] = useState(true);
+  const [storyPlaybackError, setStoryPlaybackError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
@@ -517,7 +573,7 @@ const PropertiesList = () => {
 
   const canPublishStory = !!user && (user.role === "admin" || user.role === "company");
   const currentDialogStory = activeStoryGroup?.stories[activeStoryIndex] || null;
-  const canGoPreviousStory = activeStoryIndex > 0;
+  const currentDialogStoryMedia = currentDialogStory ? resolveStoryMedia(currentDialogStory) : null;
   const canGoNextStory =
     !!activeStoryGroup && activeStoryIndex < activeStoryGroup.stories.length - 1;
 
@@ -697,13 +753,21 @@ const PropertiesList = () => {
       return;
     }
 
-    if (!selectedFile.type.startsWith("video/")) {
-      setStoryError("Please select a video file for stories.");
+    const isVideo = selectedFile.type.startsWith("video/");
+    const isImage = selectedFile.type.startsWith("image/");
+
+    if (!isVideo && !isImage) {
+      setStoryError("Please select an image or video file for stories.");
       return;
     }
 
-    if (selectedFile.size > MAX_STORY_VIDEO_SIZE_BYTES) {
+    if (isVideo && selectedFile.size > MAX_STORY_VIDEO_SIZE_BYTES) {
       setStoryError("Story video must be 30MB or less.");
+      return;
+    }
+
+    if (isImage && selectedFile.size > MAX_STORY_IMAGE_SIZE_BYTES) {
+      setStoryError("Story image must be 10MB or less.");
       return;
     }
 
@@ -711,8 +775,14 @@ const PropertiesList = () => {
     setStoryError(null);
 
     try {
-      const videoUrl = await uploadStoryVideo(selectedFile);
-      const createdStory = await createStory({ video_url: videoUrl });
+      const uploadedStoryMedia = await uploadStoryMedia(selectedFile);
+      const createdStory = await createStory({
+        media_url: uploadedStoryMedia.url,
+        media_type: uploadedStoryMedia.media_type,
+        ...(uploadedStoryMedia.media_type === "video"
+          ? { video_url: uploadedStoryMedia.url }
+          : { image_url: uploadedStoryMedia.url }),
+      });
 
       setStories((current) =>
         [createdStory, ...current].sort(
@@ -723,7 +793,7 @@ const PropertiesList = () => {
       const message =
         storyUploadError instanceof Error
           ? storyUploadError.message
-          : "Failed to upload story video.";
+          : "Failed to upload story media.";
       setStoryError(message);
     } finally {
       setUploadingStory(false);
@@ -733,6 +803,8 @@ const PropertiesList = () => {
   function openStoryViewer(group: StoryGroup) {
     setActiveStoryGroup(group);
     setActiveStoryIndex(0);
+    setStoryPlaybackProgress(0);
+    setStoryPlaybackError(null);
     setStoryDialogOpen(true);
   }
 
@@ -750,18 +822,68 @@ const PropertiesList = () => {
     });
   }
 
+  function goToStoryByTapZone() {
+    if (canGoNextStory) {
+      goToNextStory();
+      return;
+    }
+
+    setStoryDialogOpen(false);
+  }
+
+  useEffect(() => {
+    setStoryPlaybackProgress(0);
+    setStoryPlaybackError(null);
+  }, [currentDialogStory?.id, storyDialogOpen]);
+
+  useEffect(() => {
+    if (!storyDialogOpen || !currentDialogStoryMedia || currentDialogStoryMedia.type !== "image") {
+      return;
+    }
+
+    const startedAt = Date.now();
+    const timerId = window.setInterval(() => {
+      const elapsedMs = Date.now() - startedAt;
+      const progress = Math.min(1, elapsedMs / IMAGE_STORY_DURATION_MS);
+      setStoryPlaybackProgress(progress);
+
+      if (progress < 1) {
+        return;
+      }
+
+      window.clearInterval(timerId);
+
+      if (activeStoryGroup && activeStoryIndex < activeStoryGroup.stories.length - 1) {
+        setActiveStoryIndex((current) => current + 1);
+        return;
+      }
+
+      setStoryDialogOpen(false);
+    }, 100);
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [
+    activeStoryGroup,
+    activeStoryIndex,
+    currentDialogStory?.id,
+    currentDialogStoryMedia,
+    storyDialogOpen,
+  ]);
+
   return (
     <div>
       {storyError ? <p className="mb-4 text-sm text-destructive">{storyError}</p> : null}
 
-      <Card className="mb-4">
-        <div className="flex items-start justify-between gap-4 border-b px-4 py-4">
+      <Card className="mb-4 overflow-hidden border-0 bg-gradient-to-br from-slate-50 via-white to-rose-50/60 shadow-sm">
+        <div className="flex items-start justify-between gap-4 border-b border-white/70 px-4 py-4">
           <div>
-            <p className="text-base font-semibold">Stories</p>
-            <p className="mt-1 text-sm text-muted-foreground">Short videos visible for 24 hours.</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Stories</p>
+            <p className="mt-1 text-sm font-medium text-slate-700">Tap a story bubble to view.</p>
           </div>
           {canPublishStory ? (
-            <Button size="sm" onClick={openStoryFilePicker} disabled={uploadingStory}>
+            <Button size="sm" className="rounded-full px-4" onClick={openStoryFilePicker} disabled={uploadingStory}>
               <Plus className="mr-1.5 h-4 w-4" />
               {uploadingStory ? "Uploading..." : "Add Story"}
             </Button>
@@ -769,7 +891,7 @@ const PropertiesList = () => {
           <input
             ref={storyInputRef}
             type="file"
-            accept="video/*"
+            accept="image/*,video/*"
             className="hidden"
             onChange={(event) => {
               void handleStoryFileSelected(event);
@@ -780,38 +902,55 @@ const PropertiesList = () => {
           {storyGroups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No active stories yet.</p>
           ) : (
-            <div className="flex gap-4 overflow-x-auto pb-2">
-              {storyGroups.map((group) => (
-                <button
-                  key={group.created_by_uid || group.latest_story.id}
-                  type="button"
-                  className="shrink-0 text-left"
-                  onClick={() => openStoryViewer(group)}
-                >
-                  <span className="relative block h-20 w-20 rounded-full bg-gradient-to-br from-primary/80 via-rose-400 to-amber-400 p-[2px]">
-                    <span className="block h-full w-full overflow-hidden rounded-full bg-black">
-                      <video
-                        src={group.latest_story.video_url}
-                        className="h-full w-full object-cover"
-                        muted
-                        playsInline
-                        preload="metadata"
-                      />
-                    </span>
-                    {group.stories.length > 1 ? (
-                      <span className="absolute bottom-0 right-0 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-background px-1 text-[10px] font-semibold text-foreground ring-1 ring-border">
-                        {group.stories.length}
+            <div className="flex gap-4 overflow-x-auto pb-1 pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {storyGroups.map((group) => {
+                const previewMedia = resolveStoryMedia(group.latest_story);
+
+                return (
+                  <button
+                    key={group.created_by_uid || group.latest_story.id}
+                    type="button"
+                    className="group shrink-0 text-left"
+                    onClick={() => openStoryViewer(group)}
+                  >
+                    <span className="relative block h-20 w-20 rounded-full bg-gradient-to-br from-fuchsia-500 via-rose-500 to-amber-400 p-[2px] transition-transform duration-200 group-hover:scale-[1.03]">
+                      <span className="block h-full w-full overflow-hidden rounded-full bg-black ring-2 ring-white/90">
+                        {previewMedia?.type === "image" ? (
+                          <img
+                            src={previewMedia.url}
+                            alt={`${group.created_by_name} story`}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : previewMedia?.type === "video" ? (
+                          <video
+                            src={previewMedia.url}
+                            className="h-full w-full object-cover"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-sm font-semibold uppercase text-white/80">
+                            {buildInitials(group.created_by_name)}
+                          </span>
+                        )}
                       </span>
-                    ) : null}
-                  </span>
-                  <span className="mt-2 block max-w-[84px] truncate text-xs font-medium">
-                    {group.created_by_name}
-                  </span>
-                  <span className="block text-[11px] text-muted-foreground">
-                    {formatStoryAge(group.latest_story.created_at)}
-                  </span>
-                </button>
-              ))}
+                      {group.stories.length > 1 ? (
+                        <span className="absolute bottom-0 right-0 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-black/85 px-1 text-[10px] font-semibold text-white ring-1 ring-white/30">
+                          {group.stories.length}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-2 block max-w-[88px] truncate text-xs font-semibold text-slate-800">
+                      {group.created_by_name}
+                    </span>
+                    <span className="block text-[11px] text-slate-500">
+                      {formatStoryAge(group.latest_story.created_at)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1140,61 +1279,181 @@ const PropertiesList = () => {
           }
         }}
       >
-        <DialogContent className="max-w-md overflow-hidden p-0">
+        <DialogContent className="w-full max-w-[26rem] border-0 bg-transparent p-0 shadow-none [&>button]:hidden">
           {currentDialogStory ? (
             <>
-              <DialogTitle className="sr-only">Story video</DialogTitle>
+              <DialogTitle className="sr-only">Story media</DialogTitle>
               <DialogDescription className="sr-only">
                 Story from {currentDialogStory.created_by_name}
               </DialogDescription>
-              <div className="bg-black">
-                <video
-                  key={currentDialogStory.id}
-                  src={currentDialogStory.video_url}
-                  controls
-                  autoPlay
-                  playsInline
-                  className="max-h-[70vh] w-full bg-black"
-                  onEnded={() => {
-                    if (canGoNextStory) {
-                      goToNextStory();
-                    }
-                  }}
+              <div className="relative mx-auto h-[78vh] w-[min(100vw-1.5rem,24rem)] overflow-hidden rounded-3xl bg-black text-white shadow-2xl ring-1 ring-white/20">
+                {currentDialogStoryMedia?.type === "image" ? (
+                  <img
+                    key={currentDialogStory.id}
+                    src={currentDialogStoryMedia.url}
+                    alt={`${currentDialogStory.created_by_name} story`}
+                    className="h-full w-full bg-black object-cover"
+                    onLoad={() => {
+                      setStoryPlaybackError(null);
+                    }}
+                    onError={() => {
+                      setStoryPlaybackError("This story cannot be displayed right now.");
+                    }}
+                  />
+                ) : currentDialogStoryMedia?.type === "video" ? (
+                  <video
+                    ref={storyVideoRef}
+                    key={currentDialogStory.id}
+                    src={currentDialogStoryMedia.url}
+                    autoPlay
+                    playsInline
+                    muted={storyMuted}
+                    className="h-full w-full bg-black object-cover"
+                    onLoadedData={() => {
+                      setStoryPlaybackError(null);
+                    }}
+                    onTimeUpdate={(event) => {
+                      const { currentTime, duration } = event.currentTarget;
+                      if (!Number.isFinite(duration) || duration <= 0) {
+                        setStoryPlaybackProgress(0);
+                        return;
+                      }
+
+                      setStoryPlaybackProgress(Math.min(1, Math.max(0, currentTime / duration)));
+                    }}
+                    onError={() => {
+                      setStoryPlaybackError("This story cannot be played right now.");
+                    }}
+                    onEnded={() => {
+                      if (canGoNextStory) {
+                        goToNextStory();
+                        return;
+                      }
+
+                      setStoryDialogOpen(false);
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-black/80 px-6 text-center text-sm text-white/85">
+                    Story media is unavailable.
+                  </div>
+                )}
+
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/65" />
+
+                <button
+                  type="button"
+                  className="absolute inset-y-0 left-0 z-10 w-1/2 cursor-pointer bg-transparent"
+                  onClick={goToPreviousStory}
+                  aria-label="Previous story"
                 />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 z-10 w-1/2 cursor-pointer bg-transparent"
+                  onClick={goToStoryByTapZone}
+                  aria-label="Next story"
+                />
+
+                <div className="absolute inset-x-0 top-0 z-20 p-3">
+                  <div className="mb-3 flex items-center gap-1.5">
+                    {(activeStoryGroup?.stories || []).map((story, index) => {
+                      const segmentProgress =
+                        index < activeStoryIndex
+                          ? 100
+                          : index === activeStoryIndex
+                            ? storyPlaybackProgress * 100
+                            : 0;
+
+                      return (
+                        <div key={story.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
+                          <div
+                            className="h-full rounded-full bg-white transition-[width] duration-150 ease-linear"
+                            style={{ width: `${segmentProgress}%` }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 via-rose-500 to-amber-400 p-[2px]">
+                        <span className="inline-flex h-full w-full items-center justify-center rounded-full bg-black/80 text-xs font-semibold uppercase text-white">
+                          {buildInitials(activeStoryGroup?.created_by_name || "")}
+                        </span>
+                      </span>
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">
+                          {activeStoryGroup?.created_by_name}
+                        </p>
+                        <p className="truncate text-xs text-white/75">
+                          {formatStoryAge(currentDialogStory.created_at)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {currentDialogStoryMedia?.type === "video" ? (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-full bg-black/30 text-white hover:bg-black/45 hover:text-white"
+                          onClick={() => setStoryMuted((current) => !current)}
+                        >
+                          {storyMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                        </Button>
+                      ) : null}
+
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 rounded-full bg-black/30 text-white hover:bg-black/45 hover:text-white"
+                        onClick={() => setStoryDialogOpen(false)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4">
+                  <div className="inline-flex items-center rounded-full bg-black/45 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur-sm">
+                    {activeStoryIndex + 1} / {activeStoryGroup?.stories.length || 1}
+                  </div>
+                </div>
+
+                {storyPlaybackError ? (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 px-6 text-center">
+                    <p className="text-sm text-white/90">{storyPlaybackError}</p>
+                  </div>
+                ) : null}
               </div>
-              <div className="px-4 pb-4">
-                <p className="text-sm font-semibold">{activeStoryGroup?.created_by_name}</p>
-                <p className="text-xs text-muted-foreground capitalize">
-                  {activeStoryGroup?.created_by_name} · {formatStoryAge(currentDialogStory.created_at)}
-                </p>
-                {activeStoryGroup && activeStoryGroup.stories.length > 1 ? (
-                  <div className="mt-3 flex items-center justify-between gap-2">
+              {activeStoryGroup && activeStoryGroup.stories.length > 1 ? (
+                <div className="mt-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={goToPreviousStory}
-                      disabled={!canGoPreviousStory}
-                    >
-                      <ChevronLeft className="mr-1 h-4 w-4" />
-                      Previous
-                    </Button>
-                    <p className="text-xs text-muted-foreground">
-                      {activeStoryIndex + 1} / {activeStoryGroup.stories.length}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={goToNextStory}
-                      disabled={!canGoNextStory}
-                    >
-                      Next
-                      <ChevronRight className="ml-1 h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
+                    className="border-white/20 bg-black/35 text-white hover:bg-black/50 hover:text-white"
+                    disabled={activeStoryIndex === 0}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={goToStoryByTapZone}
+                    className="border-white/20 bg-black/35 text-white hover:bg-black/50 hover:text-white"
+                  >
+                    {canGoNextStory ? "Next" : "Close"}
+                  </Button>
+                </div>
+              ) : null}
             </>
           ) : null}
         </DialogContent>

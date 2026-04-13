@@ -51,7 +51,12 @@ export async function getStories(): Promise<Story[]> {
   return Array.isArray(payload.stories) ? payload.stories : [];
 }
 
-export async function createStory(data: { video_url: string }): Promise<Story> {
+export async function createStory(data: {
+  media_url: string;
+  media_type: "video" | "image";
+  video_url?: string;
+  image_url?: string;
+}): Promise<Story> {
   const payload = await authorizedJsonFetch<{ story: Story }>(
     "/api/stories/create",
     {
@@ -63,7 +68,7 @@ export async function createStory(data: { video_url: string }): Promise<Story> {
   return payload.story;
 }
 
-export async function uploadStoryVideo(file: File): Promise<string> {
+export async function uploadStoryMedia(file: File): Promise<{ url: string; media_type: "video" | "image" }> {
   const user = auth.currentUser;
 
   if (!user) {
@@ -87,11 +92,26 @@ export async function uploadStoryVideo(file: File): Promise<string> {
     success?: boolean;
     error?: string;
     url?: string;
+    media_type?: "video" | "image";
   };
 
   if (!response.ok || !payload.success || typeof payload.url !== "string") {
-    throw new Error(payload.error || "Failed to upload story video.");
+    throw new Error(payload.error || "Failed to upload story media.");
   }
 
-  return payload.url;
+  return {
+    url: payload.url,
+    media_type:
+      payload.media_type || (file.type.startsWith("image/") ? "image" : "video"),
+  };
+}
+
+export async function uploadStoryVideo(file: File): Promise<string> {
+  const uploadResult = await uploadStoryMedia(file);
+
+  if (uploadResult.media_type !== "video") {
+    throw new Error("Selected file is not a video.");
+  }
+
+  return uploadResult.url;
 }
