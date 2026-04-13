@@ -60,6 +60,34 @@ function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   return { uploadedImages, localBlobImages };
 }
 
+function resolvePreferredMainImage(mainImage: string | undefined, images: string[]) {
+  if (mainImage && images.includes(mainImage)) {
+    return mainImage;
+  }
+
+  return images[0];
+}
+
+function resolveMainImageAfterUpload(
+  preferredMainImage: string | undefined,
+  uploadedImages: string[],
+  localBlobImages: string[],
+  newlyUploadedImages: string[],
+) {
+  if (preferredMainImage && uploadedImages.includes(preferredMainImage)) {
+    return preferredMainImage;
+  }
+
+  if (preferredMainImage) {
+    const localIndex = localBlobImages.indexOf(preferredMainImage);
+    if (localIndex >= 0 && newlyUploadedImages[localIndex]) {
+      return newlyUploadedImages[localIndex];
+    }
+  }
+
+  return [...uploadedImages, ...newlyUploadedImages][0];
+}
+
 function hasOptionById(items: Array<{ id: string }>, id?: string) {
   if (!id) {
     return false;
@@ -676,6 +704,7 @@ const ProjectForm = () => {
       ) as LocalImageFileMap;
 
       const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeUnitLocalFiles);
+      const preferredMainImage = resolvePreferredMainImage(payload.main_image, payload.images);
 
       if (unitEditingId) {
         const newlyUploadedImages = await uploadUnitImageBlobUrls(
@@ -689,19 +718,30 @@ const ProjectForm = () => {
         }
 
         const allImages = [...uploadedImages, ...newlyUploadedImages];
+        const selectedMainImage = resolveMainImageAfterUpload(
+          preferredMainImage,
+          uploadedImages,
+          localBlobImages,
+          newlyUploadedImages,
+        );
 
         const updated = await updateUnit(unitEditingId, {
           ...payload,
           images: allImages,
-          main_image: allImages[0],
+          main_image: selectedMainImage || allImages[0],
         });
 
         setUnits((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       } else {
+        const initialMainImage =
+          preferredMainImage && uploadedImages.includes(preferredMainImage)
+            ? preferredMainImage
+            : uploadedImages[0];
+
         const created = await createUnit({
           ...payload,
           images: uploadedImages,
-          main_image: uploadedImages[0],
+          main_image: initialMainImage,
         });
 
         const newlyUploadedImages = await uploadUnitImageBlobUrls(
@@ -718,10 +758,17 @@ const ProjectForm = () => {
         let createdOrUpdated: Unit = created;
 
         if (allImages.length > 0) {
+          const selectedMainImage = resolveMainImageAfterUpload(
+            preferredMainImage,
+            uploadedImages,
+            localBlobImages,
+            newlyUploadedImages,
+          );
+
           createdOrUpdated = await updateUnit(created.id, {
             ...payload,
             images: allImages,
-            main_image: allImages[0],
+            main_image: selectedMainImage || allImages[0],
           });
         }
 
@@ -828,6 +875,7 @@ const ProjectForm = () => {
       ) as LocalImageFileMap;
 
       const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeLocalFiles);
+      const preferredMainImage = resolvePreferredMainImage(payload.main_image, payload.images);
 
       if (isEdit && id) {
         const newlyUploadedImages = await uploadProjectImageBlobUrls(id, localBlobImages, activeLocalFiles);
@@ -836,17 +884,28 @@ const ProjectForm = () => {
         }
 
         const allImages = [...uploadedImages, ...newlyUploadedImages];
+        const selectedMainImage = resolveMainImageAfterUpload(
+          preferredMainImage,
+          uploadedImages,
+          localBlobImages,
+          newlyUploadedImages,
+        );
 
         await updateProject(id, {
           ...payload,
           images: allImages,
-          main_image: allImages[0],
+          main_image: selectedMainImage || allImages[0],
         });
       } else {
+        const initialMainImage =
+          preferredMainImage && uploadedImages.includes(preferredMainImage)
+            ? preferredMainImage
+            : uploadedImages[0];
+
         const created = await createProject({
           ...payload,
           images: uploadedImages,
-          main_image: uploadedImages[0],
+          main_image: initialMainImage,
         });
 
         const newlyUploadedImages = await uploadProjectImageBlobUrls(
@@ -862,10 +921,17 @@ const ProjectForm = () => {
         const allImages = [...uploadedImages, ...newlyUploadedImages];
 
         if (allImages.length > 0) {
+          const selectedMainImage = resolveMainImageAfterUpload(
+            preferredMainImage,
+            uploadedImages,
+            localBlobImages,
+            newlyUploadedImages,
+          );
+
           await updateProject(created.id, {
             ...payload,
             images: allImages,
-            main_image: allImages[0],
+            main_image: selectedMainImage || allImages[0],
           });
         }
       }
@@ -1047,6 +1113,8 @@ const ProjectForm = () => {
                 <Label className="mb-3 block">Images (Optional)</Label>
                 <ImageUpload
                   images={form.images}
+                  mainImage={form.main_image}
+                  onMainImageChange={(imageUrl) => update("main_image", imageUrl)}
                   onLocalFilesAdded={(entries) => {
                     setLocalImageFiles((prev) => {
                       const next = { ...prev };
@@ -1075,7 +1143,11 @@ const ProjectForm = () => {
                       return next;
                     });
 
+                    const nextMainImage =
+                      images.includes(form.main_image || "") ? form.main_image : images[0];
+
                     update("images", images);
+                    update("main_image", nextMainImage);
                   }}
                 />
               </div>
@@ -1452,6 +1524,8 @@ const ProjectForm = () => {
                         <Label>Unit Images (Optional)</Label>
                         <ImageUpload
                           images={unitDraft.images || []}
+                          mainImage={unitDraft.main_image}
+                          onMainImageChange={(imageUrl) => updateUnitDraft("main_image", imageUrl)}
                           onLocalFilesAdded={(entries) => {
                             setUnitLocalImageFiles((prev) => {
                               const next = { ...prev };
@@ -1480,10 +1554,15 @@ const ProjectForm = () => {
                               return next;
                             });
 
+                            const nextMainImage =
+                              images.includes(unitDraft.main_image || "")
+                                ? unitDraft.main_image
+                                : images[0];
+
                             setUnitDraft((prev) => ({
                               ...prev,
                               images,
-                              main_image: images[0] || undefined,
+                              main_image: nextMainImage,
                             }));
                           }}
                         />

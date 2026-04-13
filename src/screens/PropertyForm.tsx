@@ -64,7 +64,6 @@ const OWNERSHIP_TYPE_OPTIONS = [
 const OPTIONAL_LINK_NONE = "__none__";
 
 const TOWER_NUMBER_TYPE_KEYWORDS = ["apartment", "department", "villa", "شقة", "فيلا"];
-const LAND_NUMBER_TYPE_KEYWORDS = ["house", "منزل", "بيت"];
 
 function parseOptionalNumber(value: string): number | undefined {
   const trimmed = value.trim();
@@ -160,6 +159,34 @@ function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   return { uploadedImages, localBlobImages };
 }
 
+function resolvePreferredMainImage(mainImage: string | undefined, images: string[]) {
+  if (mainImage && images.includes(mainImage)) {
+    return mainImage;
+  }
+
+  return images[0];
+}
+
+function resolveMainImageAfterUpload(
+  preferredMainImage: string | undefined,
+  uploadedImages: string[],
+  localBlobImages: string[],
+  newlyUploadedImages: string[],
+) {
+  if (preferredMainImage && uploadedImages.includes(preferredMainImage)) {
+    return preferredMainImage;
+  }
+
+  if (preferredMainImage) {
+    const localIndex = localBlobImages.indexOf(preferredMainImage);
+    if (localIndex >= 0 && newlyUploadedImages[localIndex]) {
+      return newlyUploadedImages[localIndex];
+    }
+  }
+
+  return [...uploadedImages, ...newlyUploadedImages][0];
+}
+
 function hasOptionById(items: Array<{ id: string }>, id?: string) {
   if (!id) {
     return false;
@@ -245,10 +272,6 @@ const PropertyForm = () => {
   }, [form.type_id, propertyTypes]);
   const showTowerNumber = useMemo(
     () => TOWER_NUMBER_TYPE_KEYWORDS.some((keyword) => selectedTypeSearchText.includes(keyword)),
-    [selectedTypeSearchText],
-  );
-  const showLandNumber = useMemo(
-    () => LAND_NUMBER_TYPE_KEYWORDS.some((keyword) => selectedTypeSearchText.includes(keyword)),
     [selectedTypeSearchText],
   );
   const areaNames = useMemo(
@@ -476,6 +499,7 @@ const PropertyForm = () => {
       ) as LocalImageFileMap;
 
       const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeLocalFiles);
+      const preferredMainImage = resolvePreferredMainImage(payload.main_image, payload.images);
 
       if (isEdit && id) {
         const newlyUploadedImages = await uploadPropertyImageBlobUrls(id, localBlobImages, activeLocalFiles);
@@ -484,17 +508,28 @@ const PropertyForm = () => {
         }
 
         const allImages = [...uploadedImages, ...newlyUploadedImages];
+        const selectedMainImage = resolveMainImageAfterUpload(
+          preferredMainImage,
+          uploadedImages,
+          localBlobImages,
+          newlyUploadedImages,
+        );
 
         await updateProperty(id, {
           ...payload,
           images: allImages,
-          main_image: allImages[0],
+          main_image: selectedMainImage || allImages[0],
         });
       } else {
+        const initialMainImage =
+          preferredMainImage && uploadedImages.includes(preferredMainImage)
+            ? preferredMainImage
+            : uploadedImages[0];
+
         const created = await createProperty({
           ...payload,
           images: uploadedImages,
-          main_image: uploadedImages[0],
+          main_image: initialMainImage,
         });
 
         const newlyUploadedImages = await uploadPropertyImageBlobUrls(
@@ -509,10 +544,17 @@ const PropertyForm = () => {
         const allImages = [...uploadedImages, ...newlyUploadedImages];
 
         if (allImages.length > 0) {
+          const selectedMainImage = resolveMainImageAfterUpload(
+            preferredMainImage,
+            uploadedImages,
+            localBlobImages,
+            newlyUploadedImages,
+          );
+
           await updateProperty(created.id, {
             ...payload,
             images: allImages,
-            main_image: allImages[0],
+            main_image: selectedMainImage || allImages[0],
           });
         }
       }
@@ -713,9 +755,6 @@ const PropertyForm = () => {
             {showTowerNumber ? (
               <div className="space-y-2"><Label>Tower Number (Optional)</Label><Input value={form.tower_number || ""} onChange={e => update("tower_number", e.target.value)} /></div>
             ) : null}
-            {showLandNumber ? (
-              <div className="space-y-2"><Label>Land Number (Optional)</Label><Input value={form.land_number || ""} onChange={e => update("land_number", e.target.value)} /></div>
-            ) : null}
           </div>
         </FormSection>
 
@@ -725,6 +764,8 @@ const PropertyForm = () => {
               <Label className="mb-3 block">Images (Optional)</Label>
               <ImageUpload
                 images={form.images}
+                mainImage={form.main_image}
+                onMainImageChange={(imageUrl) => update("main_image", imageUrl)}
                 onLocalFilesAdded={(entries) => {
                   setLocalImageFiles((prev) => {
                     const next = { ...prev };
@@ -753,7 +794,11 @@ const PropertyForm = () => {
                     return next;
                   });
 
+                  const nextMainImage =
+                    imgs.includes(form.main_image || "") ? form.main_image : imgs[0];
+
                   update("images", imgs);
+                  update("main_image", nextMainImage);
                 }}
               />
             </div>

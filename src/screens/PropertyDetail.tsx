@@ -407,6 +407,10 @@ const PropertyDetail = () => {
                 <p className="text-sm font-semibold text-slate-700">{cityName}</p>
               </div>
               <div>
+                <p className="text-xs text-slate-400 uppercase">Area</p>
+                <p className="text-sm font-semibold text-slate-700">{property.area || "—"}</p>
+              </div>
+              <div>
                 <p className="text-xs text-slate-400 uppercase">Type</p>
                 <p className="text-sm font-semibold text-slate-700">{typeName}</p>
               </div>
@@ -526,6 +530,7 @@ const PropertyDetail = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Property ID" value={propertyCode} />
                   <Field label="Type" value={typeName} />
+                  <Field label="Area" value={property.area} />
                   <Field label="Listing Type" value={listingTypeLabel} />
                   <Field label="Date" value={propertyDateLabel} />
                   <Field label="Ownership Type" value={ownershipTypeLabel} />

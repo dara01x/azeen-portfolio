@@ -11,15 +11,21 @@ type LocalImageEntry = {
 
 export function ImageUpload({
   images = [],
+  mainImage,
   onChange,
+  onMainImageChange,
   onLocalFilesAdded,
 }: {
   images: string[];
+  mainImage?: string;
   onChange: (imgs: string[]) => void;
+  onMainImageChange?: (imageUrl: string | undefined) => void;
   onLocalFilesAdded?: (entries: LocalImageEntry[]) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const resolvedMainImage =
+    mainImage && images.includes(mainImage) ? mainImage : images[0] || undefined;
 
   const handleFilesSelected = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -52,8 +58,13 @@ export function ImageUpload({
     const localImageUrls = localImageEntries.map((entry) => entry.url);
 
     if (localImageUrls.length > 0) {
+      const nextImages = [...images, ...localImageUrls];
       onLocalFilesAdded?.(localImageEntries);
-      onChange([...images, ...localImageUrls]);
+      onChange(nextImages);
+
+      if (!resolvedMainImage) {
+        onMainImageChange?.(nextImages[0]);
+      }
     }
 
     const droppedByCount = sizeAcceptedFiles.length - acceptedFiles.length;
@@ -81,9 +92,33 @@ export function ImageUpload({
         {images.map((img, i) => (
           <div key={i} className="group relative aspect-video rounded-xl border bg-muted overflow-hidden">
             <img src={img} alt="" className="h-full w-full object-cover" />
+
+            {img === resolvedMainImage ? (
+              <span className="absolute left-1.5 top-1.5 rounded-full bg-primary/90 px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                Cover
+              </span>
+            ) : null}
+
+            {images.length > 1 && onMainImageChange && img !== resolvedMainImage ? (
+              <button
+                type="button"
+                onClick={() => onMainImageChange(img)}
+                className="absolute bottom-1.5 left-1.5 rounded bg-background/85 px-2 py-1 text-[10px] font-medium text-foreground opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                Set cover
+              </button>
+            ) : null}
+
             <button
               type="button"
-              onClick={() => onChange(images.filter((_, idx) => idx !== i))}
+              onClick={() => {
+                const nextImages = images.filter((_, idx) => idx !== i);
+                onChange(nextImages);
+
+                if (img === resolvedMainImage) {
+                  onMainImageChange?.(nextImages[0]);
+                }
+              }}
               className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-foreground/60 text-background flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <X className="h-3 w-3" />

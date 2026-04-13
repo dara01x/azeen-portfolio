@@ -43,6 +43,34 @@ function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   return { uploadedImages, localBlobImages };
 }
 
+function resolvePreferredMainImage(mainImage: string | undefined, images: string[]) {
+  if (mainImage && images.includes(mainImage)) {
+    return mainImage;
+  }
+
+  return images[0];
+}
+
+function resolveMainImageAfterUpload(
+  preferredMainImage: string | undefined,
+  uploadedImages: string[],
+  localBlobImages: string[],
+  newlyUploadedImages: string[],
+) {
+  if (preferredMainImage && uploadedImages.includes(preferredMainImage)) {
+    return preferredMainImage;
+  }
+
+  if (preferredMainImage) {
+    const localIndex = localBlobImages.indexOf(preferredMainImage);
+    if (localIndex >= 0 && newlyUploadedImages[localIndex]) {
+      return newlyUploadedImages[localIndex];
+    }
+  }
+
+  return [...uploadedImages, ...newlyUploadedImages][0];
+}
+
 const defaultUnit: Omit<Unit, "id"> = {
   unit_code: "",
   project_id: "",
@@ -415,6 +443,7 @@ const UnitForm = () => {
       ) as LocalImageFileMap;
 
       const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeLocalFiles);
+      const preferredMainImage = resolvePreferredMainImage(payload.main_image, payload.images);
 
       if (isEdit && id) {
         const newlyUploadedImages = await uploadUnitImageBlobUrls(id, localBlobImages, activeLocalFiles);
@@ -423,17 +452,28 @@ const UnitForm = () => {
         }
 
         const allImages = [...uploadedImages, ...newlyUploadedImages];
+        const selectedMainImage = resolveMainImageAfterUpload(
+          preferredMainImage,
+          uploadedImages,
+          localBlobImages,
+          newlyUploadedImages,
+        );
 
         await updateUnit(id, {
           ...payload,
           images: allImages,
-          main_image: allImages[0],
+          main_image: selectedMainImage || allImages[0],
         });
       } else {
+        const initialMainImage =
+          preferredMainImage && uploadedImages.includes(preferredMainImage)
+            ? preferredMainImage
+            : uploadedImages[0];
+
         const created = await createUnit({
           ...payload,
           images: uploadedImages,
-          main_image: uploadedImages[0],
+          main_image: initialMainImage,
         });
 
         const newlyUploadedImages = await uploadUnitImageBlobUrls(
@@ -449,10 +489,17 @@ const UnitForm = () => {
         const allImages = [...uploadedImages, ...newlyUploadedImages];
 
         if (allImages.length > 0) {
+          const selectedMainImage = resolveMainImageAfterUpload(
+            preferredMainImage,
+            uploadedImages,
+            localBlobImages,
+            newlyUploadedImages,
+          );
+
           await updateUnit(created.id, {
             ...payload,
             images: allImages,
-            main_image: allImages[0],
+            main_image: selectedMainImage || allImages[0],
           });
         }
       }
@@ -793,6 +840,8 @@ const UnitForm = () => {
         <CardContent>
           <ImageUpload
             images={form.images}
+            mainImage={form.main_image}
+            onMainImageChange={(imageUrl) => update("main_image", imageUrl)}
             onLocalFilesAdded={(entries) => {
               setLocalImageFiles((prev) => {
                 const next = { ...prev };
@@ -821,8 +870,11 @@ const UnitForm = () => {
                 return next;
               });
 
+              const nextMainImage =
+                images.includes(form.main_image || "") ? form.main_image : images[0];
+
               update("images", images);
-              update("main_image", images[0] || undefined);
+              update("main_image", nextMainImage);
             }}
           />
         </CardContent>
