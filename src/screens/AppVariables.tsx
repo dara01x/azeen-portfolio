@@ -143,7 +143,7 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
     }
 
     const normalizedBoundary = normalizeAreaBoundaryPoints(editBoundaryPoints);
-    if (isAreaType && normalizedBoundary.length < MIN_AREA_BOUNDARY_POINTS) {
+    if (isAreaType && normalizedBoundary.length > 0 && normalizedBoundary.length < MIN_AREA_BOUNDARY_POINTS) {
       setError("Area boundary must contain at least 3 points.");
       return;
     }
@@ -342,7 +342,7 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
                 <AreaBoundaryPickerMap points={editBoundaryPoints} onChange={setEditBoundaryPoints} />
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">
-                    Click on map to update boundary points. First point is Start (S), last point is End (E), and the boundary closes automatically. Minimum {MIN_AREA_BOUNDARY_POINTS} points required.
+                    Click on map to update boundary points. First point is Start (S), last point is End (E), and the boundary closes automatically. Minimum {MIN_AREA_BOUNDARY_POINTS} points required, or clear all points to remove area location.
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
@@ -361,7 +361,7 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
                       onClick={() => setEditBoundaryPoints([])}
                       disabled={editBoundaryPoints.length === 0}
                     >
-                      Clear
+                      Clear Location
                     </Button>
                   </div>
                 </div>
@@ -413,17 +413,17 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
 const AppVariables = () => (
   <div>
     <PageHeader title="App Variables" description="Manage system lookup values" />
-    <Tabs defaultValue="types">
+    <Tabs defaultValue="areas">
       <TabsList>
+        <TabsTrigger value="areas">Areas</TabsTrigger>
         <TabsTrigger value="types">Property Types</TabsTrigger>
         <TabsTrigger value="cities">Cities</TabsTrigger>
-        <TabsTrigger value="areas">Areas</TabsTrigger>
         <TabsTrigger value="amenities">Amenities</TabsTrigger>
         <TabsTrigger value="views">Views</TabsTrigger>
       </TabsList>
+      <TabsContent value="areas"><VariableTable title="Areas" type="areas" /></TabsContent>
       <TabsContent value="types"><VariableTable title="Property Types" type="property_types" /></TabsContent>
       <TabsContent value="cities"><VariableTable title="Cities" type="cities" /></TabsContent>
-      <TabsContent value="areas"><VariableTable title="Areas" type="areas" /></TabsContent>
       <TabsContent value="amenities"><VariableTable title="Amenities" type="amenities" /></TabsContent>
       <TabsContent value="views"><VariableTable title="Views" type="views" /></TabsContent>
     </Tabs>

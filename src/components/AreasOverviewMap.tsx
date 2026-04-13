@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Feature, FeatureCollection } from "geojson";
 import type { AppVariableItem, AreaBoundaryPoint } from "@/modules/app-variables/types";
 import { DUHOK_DEFAULT_CENTER } from "@/lib/constants/map";
@@ -18,12 +18,23 @@ type ResolvedArea = {
   center: AreaBoundaryPoint;
 };
 
+export type AreasOverviewPropertyPoint = {
+  id: string;
+  title: string;
+  lat: number;
+  lng: number;
+  propertyCode: string;
+  priceLabel: string;
+};
+
 const DEFAULT_CENTER = DUHOK_DEFAULT_CENTER;
 const DEFAULT_ZOOM = 11;
 const MAX_FIT_ZOOM = 14;
+const SINGLE_POINT_ZOOM = 15;
 const CURRENT_LOCATION_ZOOM = 16;
 const GEOLOCATION_TIMEOUT_MS = 7000;
 const GEOLOCATION_MAX_AGE_MS = 300000;
+const PROPERTY_MARKER_COLOR = "#2563eb";
 const AREA_SOURCE_ID = "areas-overview-source";
 const AREA_FILL_LAYER_ID = "areas-overview-fill";
 const AREA_LINE_LAYER_ID = "areas-overview-line";
@@ -224,20 +235,63 @@ function createAreaLabelElement(
   return element;
 }
 
+function createPropertyPopupContent(point: AreasOverviewPropertyPoint): HTMLDivElement {
+  const container = document.createElement("div");
+  container.style.padding = "2px 0";
+  container.style.minWidth = "170px";
+
+  const link = document.createElement("a");
+  link.href = `/properties/${point.id}`;
+  link.style.display = "block";
+  link.style.textDecoration = "none";
+  link.style.color = "inherit";
+  link.style.cursor = "pointer";
+
+  const title = document.createElement("p");
+  title.style.fontSize = "13px";
+  title.style.fontWeight = "700";
+  title.style.color = "#0f172a";
+  title.style.margin = "0 0 4px 0";
+  title.textContent = point.title;
+
+  const code = document.createElement("p");
+  code.style.fontSize = "11px";
+  code.style.color = "#64748b";
+  code.style.margin = "0";
+  code.textContent = `Code: ${point.propertyCode}`;
+
+  const price = document.createElement("p");
+  price.style.fontSize = "11px";
+  price.style.color = "#334155";
+  price.style.margin = "2px 0 0 0";
+  price.textContent = point.priceLabel;
+
+  link.appendChild(title);
+  link.appendChild(code);
+  link.appendChild(price);
+  container.appendChild(link);
+
+  return container;
+}
+
 export function AreasOverviewMap({
   areas,
+  propertyPoints = [],
   selectedAreaName = "all",
   onAreaSelect,
 }: {
   areas: AppVariableItem[];
+  propertyPoints?: AreasOverviewPropertyPoint[];
   selectedAreaName?: string;
   onAreaSelect?: (areaName: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const maplibreRef = useRef<MapLibreModule | null>(null);
-  const markersRef = useRef<MapLibreMarker[]>([]);
+  const areaLabelMarkersRef = useRef<MapLibreMarker[]>([]);
+  const propertyMarkersRef = useRef<MapLibreMarker[]>([]);
   const onAreaSelectRef = useRef(onAreaSelect);
+  const [mapReadyTick, setMapReadyTick] = useState(0);
 
   useEffect(() => {
     onAreaSelectRef.current = onAreaSelect;
@@ -328,14 +382,17 @@ export function AreasOverviewMap({
       };
 
       mapRef.current = map;
+      setMapReadyTick((value) => value + 1);
     }
 
     void initializeMap();
 
     return () => {
       cancelled = true;
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
+      areaLabelMarkersRef.current.forEach((marker) => marker.remove());
+      areaLabelMarkersRef.current = [];
+      propertyMarkersRef.current.forEach((marker) => marker.remove());
+      propertyMarkersRef.current = [];
       mapRef.current?.remove();
       mapRef.current = null;
       maplibreRef.current = null;
@@ -357,13 +414,18 @@ export function AreasOverviewMap({
         selectedAreaName !== "all"
           ? resolvedAreas.find((area) => area.name === selectedAreaName) || null
           : null;
+      const validPropertyPoints = propertyPoints.filter(
+        (point) => isFiniteNumber(point.lat) && isFiniteNumber(point.lng),
+      );
 
       ensureAreaLayers(map);
       const source = map.getSource(AREA_SOURCE_ID) as GeoJsonSource | undefined;
       source?.setData(areaFeatureCollection(resolvedAreas, selectedAreaName) as never);
 
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
+      areaLabelMarkersRef.current.forEach((marker) => marker.remove());
+      areaLabelMarkersRef.current = [];
+      propertyMarkersRef.current.forEach((marker) => marker.remove());
+      propertyMarkersRef.current = [];
 
       if (map.getLayer(AREA_FILL_LAYER_ID)) {
         map.setPaintProperty(AREA_FILL_LAYER_ID, "fill-color", [
@@ -395,7 +457,7 @@ export function AreasOverviewMap({
         ]);
       }
 
-      if (resolvedAreas.length === 0) {
+      if (resolvedAreas.length === 0 && validPropertyPoints.length === 0) {
         map.easeTo({
           center: toLngLat(DEFAULT_CENTER),
           zoom: DEFAULT_ZOOM,
@@ -406,10 +468,20 @@ export function AreasOverviewMap({
 
       const bounds = new maplibre.LngLatBounds();
       const boundsAreas = selectedArea ? [selectedArea] : resolvedAreas;
+      let firstAnchor: [number, number] | null = null;
+      let anchorCount = 0;
+
+      const extendBounds = (coordinates: [number, number]) => {
+        bounds.extend(coordinates);
+        if (!firstAnchor) {
+          firstAnchor = coordinates;
+        }
+        anchorCount += 1;
+      };
 
       boundsAreas.forEach((area) => {
         area.boundary.forEach((point) => {
-          bounds.extend(toLngLat(point));
+          extendBounds(toLngLat(point));
         });
       });
 
@@ -423,8 +495,29 @@ export function AreasOverviewMap({
           .setLngLat(toLngLat(area.center))
           .addTo(map);
 
-        markersRef.current.push(marker);
+        areaLabelMarkersRef.current.push(marker);
       });
+
+      validPropertyPoints.forEach((point) => {
+        const coordinates: [number, number] = [point.lng, point.lat];
+        extendBounds(coordinates);
+
+        const marker = new maplibre.Marker({ color: PROPERTY_MARKER_COLOR })
+          .setLngLat(coordinates)
+          .setPopup(new maplibre.Popup({ offset: 16 }).setDOMContent(createPropertyPopupContent(point)))
+          .addTo(map);
+
+        propertyMarkersRef.current.push(marker);
+      });
+
+      if (anchorCount === 1 && firstAnchor) {
+        map.easeTo({
+          center: firstAnchor,
+          zoom: SINGLE_POINT_ZOOM,
+          duration: 700,
+        });
+        return;
+      }
 
       map.fitBounds(bounds, {
         padding: 60,
@@ -439,7 +532,7 @@ export function AreasOverviewMap({
     }
 
     syncAreas();
-  }, [areas, selectedAreaName]);
+  }, [areas, propertyPoints, selectedAreaName, mapReadyTick]);
 
   return (
     <div className="h-[24rem] w-full overflow-hidden rounded-xl border shadow-sm">

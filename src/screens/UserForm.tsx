@@ -144,8 +144,8 @@ const UserForm = () => {
       full_name: fullName,
       email,
       phone,
-      company_name: form.role === "company" ? form.company_name?.trim() || undefined : undefined,
-      company_phone: form.role === "company" ? form.company_phone?.trim() || undefined : undefined,
+      company_name: form.role === "company" ? fullName : undefined,
+      company_phone: form.role === "company" ? phone : undefined,
       company_address: form.role === "company" ? form.company_address?.trim() || undefined : undefined,
     };
 
@@ -269,16 +269,6 @@ const UserForm = () => {
             </div>
           </CardContent>
         </Card>
-        {form.role === "company" && (
-          <Card>
-            <CardHeader className="pb-4"><CardTitle className="text-base">Company Details</CardTitle><CardDescription>Additional information for company users</CardDescription></CardHeader>
-            <CardContent className="grid gap-5 sm:grid-cols-2">
-              <div className="sm:col-span-2 space-y-2"><Label>Company Name</Label><Input value={form.company_name || ""} onChange={e => update("company_name", e.target.value)} /></div>
-              <div className="space-y-2"><Label>Company Phone</Label><Input value={form.company_phone || ""} onChange={e => update("company_phone", e.target.value)} /></div>
-              <div className="space-y-2"><Label>Company Address</Label><Input value={form.company_address || ""} onChange={e => update("company_address", e.target.value)} /></div>
-            </CardContent>
-          </Card>
-        )}
         <div className="flex justify-end gap-3 pb-8">
           <Button variant="outline" asChild><Link href="/users">Cancel</Link></Button>
           <Button onClick={() => void handleSubmit()} size="lg" disabled={saving || loading || deleting}>

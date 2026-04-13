@@ -22,8 +22,7 @@ import { toast } from "@/components/ui/sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { PropertiesAreaMap, type AreaMapPropertyPoint } from "@/components/PropertiesAreaMap";
-import { AreasOverviewMap } from "@/components/AreasOverviewMap";
+import { AreasOverviewMap, type AreasOverviewPropertyPoint } from "@/components/AreasOverviewMap";
 import {
   deleteProperty as deletePropertyById,
   getProperties as fetchProperties,
@@ -148,20 +147,6 @@ function normalizeAreaBoundaryPoints(points?: AreaBoundaryPoint[]) {
   );
 }
 
-function normalizeAreaCenterPoint(point?: AreaBoundaryPoint | null) {
-  if (
-    !point ||
-    typeof point.lat !== "number" ||
-    !Number.isFinite(point.lat) ||
-    typeof point.lng !== "number" ||
-    !Number.isFinite(point.lng)
-  ) {
-    return null;
-  }
-
-  return point;
-}
-
 function isPointInsidePolygon(point: AreaBoundaryPoint, polygon: AreaBoundaryPoint[]) {
   if (polygon.length < 3) {
     return false;
@@ -203,6 +188,7 @@ const PropertiesList = () => {
   const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
   const [storyPlaybackProgress, setStoryPlaybackProgress] = useState(0);
+  const [imageStoryLoaded, setImageStoryLoaded] = useState(false);
   const [storyMuted, setStoryMuted] = useState(true);
   const [storyPlaybackError, setStoryPlaybackError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -401,7 +387,6 @@ const PropertiesList = () => {
   const selectedAreaItem =
     areaFilter === "all" ? null : areas.find((area) => area.name === areaFilter) || null;
   const selectedAreaBoundary = normalizeAreaBoundaryPoints(selectedAreaItem?.area_boundary);
-  const selectedAreaCenter = normalizeAreaCenterPoint(selectedAreaItem?.area_center);
   const useBoundaryAreaFiltering = selectedAreaBoundary.length >= 3;
 
   const propertyMatchesSelectedArea = (property: Property) => {
@@ -470,31 +455,32 @@ const PropertiesList = () => {
     return true;
   });
 
-  const areaMatchedCount = areaFilter === "all" ? 0 : filtered.length;
-  const areaMapPoints: AreaMapPropertyPoint[] =
-    areaFilter === "all"
-      ? []
-      : filtered.flatMap((property) => {
-          if (
-            typeof property.lat !== "number" ||
-            !Number.isFinite(property.lat) ||
-            typeof property.lng !== "number" ||
-            !Number.isFinite(property.lng)
-          ) {
-            return [];
-          }
+  const areaMatchedCount = filtered.length;
+  const areaMapPoints: AreasOverviewPropertyPoint[] = useMemo(
+    () =>
+      filtered.flatMap((property) => {
+        if (
+          typeof property.lat !== "number" ||
+          !Number.isFinite(property.lat) ||
+          typeof property.lng !== "number" ||
+          !Number.isFinite(property.lng)
+        ) {
+          return [];
+        }
 
-          return [
-            {
-              id: property.id,
-              title: property.title,
-              lat: property.lat,
-              lng: property.lng,
-              propertyCode: getPropertyCode(property),
-              priceLabel: `${property.currency} ${property.price.toLocaleString()}`,
-            },
-          ];
-        });
+        return [
+          {
+            id: property.id,
+            title: property.title,
+            lat: property.lat,
+            lng: property.lng,
+            propertyCode: getPropertyCode(property),
+            priceLabel: `${property.currency} ${property.price.toLocaleString()}`,
+          },
+        ];
+      }),
+    [filtered],
+  );
 
   const areasWithBoundary = useMemo(
     () => areas.filter((area) => normalizeAreaBoundaryPoints(area.area_boundary).length >= 3),
@@ -580,6 +566,7 @@ const PropertiesList = () => {
   const canPublishStory = !!user && (user.role === "admin" || user.role === "company");
   const currentDialogStory = activeStoryGroup?.stories[activeStoryIndex] || null;
   const currentDialogStoryMedia = currentDialogStory ? resolveStoryMedia(currentDialogStory) : null;
+  const isCurrentDialogImageStory = currentDialogStoryMedia?.type === "image";
   const canGoNextStory =
     !!activeStoryGroup && activeStoryIndex < activeStoryGroup.stories.length - 1;
 
@@ -840,10 +827,11 @@ const PropertiesList = () => {
   useEffect(() => {
     setStoryPlaybackProgress(0);
     setStoryPlaybackError(null);
+    setImageStoryLoaded(false);
   }, [currentDialogStory?.id, storyDialogOpen]);
 
   useEffect(() => {
-    if (!storyDialogOpen || !currentDialogStoryMedia || currentDialogStoryMedia.type !== "image") {
+    if (!storyDialogOpen || !isCurrentDialogImageStory || !imageStoryLoaded) {
       return;
     }
 
@@ -858,6 +846,7 @@ const PropertiesList = () => {
       }
 
       window.clearInterval(timerId);
+      setStoryPlaybackProgress(1);
 
       if (activeStoryGroup && activeStoryIndex < activeStoryGroup.stories.length - 1) {
         setActiveStoryIndex((current) => current + 1);
@@ -871,10 +860,10 @@ const PropertiesList = () => {
       window.clearInterval(timerId);
     };
   }, [
-    activeStoryGroup,
     activeStoryIndex,
-    currentDialogStory?.id,
-    currentDialogStoryMedia,
+    activeStoryGroup?.stories.length,
+    imageStoryLoaded,
+    isCurrentDialogImageStory,
     storyDialogOpen,
   ]);
 
@@ -974,8 +963,10 @@ const PropertiesList = () => {
         <div className="flex flex-col gap-3 border-b px-4 py-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-base font-semibold">All Areas Overview</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Use this map to filter by area. Click a labeled section on the map or choose from the selector.
+            <p className="mt-1 text-xs text-muted-foreground">
+              {areaFilter === "all"
+                ? `Showing ${areaMapPoints.length} mapped properties out of ${areaMatchedCount} visible results across all areas.`
+                : `Showing ${areaMapPoints.length} mapped properties out of ${areaMatchedCount} matches in area: ${areaFilter}`}
             </p>
           </div>
 
@@ -993,43 +984,20 @@ const PropertiesList = () => {
           </div>
         </div>
         <div className="p-4">
-          {areasWithBoundary.length > 0 ? (
+          {areasWithBoundary.length > 0 || areaMapPoints.length > 0 ? (
             <AreasOverviewMap
               areas={areas}
+              propertyPoints={areaMapPoints}
               selectedAreaName={areaFilter}
               onAreaSelect={setAreaFilter}
             />
           ) : (
             <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
-              No area boundaries are configured yet. Add boundaries in App Variables - Areas.
+              No area boundaries or property coordinates are available yet.
             </div>
           )}
         </div>
       </Card>
-
-      {areaFilter !== "all" ? (
-        <Card className="mb-4">
-          <div className="border-b px-4 py-4">
-            <p className="text-base font-semibold">Area Map</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Showing {areaMapPoints.length} mapped properties out of {areaMatchedCount} matches in area: {areaFilter}
-            </p>
-          </div>
-          <div className="p-4">
-            {areaMapPoints.length > 0 || selectedAreaBoundary.length >= 3 || selectedAreaCenter ? (
-              <PropertiesAreaMap
-                points={areaMapPoints}
-                areaBoundary={selectedAreaBoundary}
-                focusCenter={selectedAreaCenter}
-              />
-            ) : (
-              <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
-                No exact property coordinates available in this area yet. Add latitude/longitude in property details to show pins here.
-              </div>
-            )}
-          </div>
-        </Card>
-      ) : null}
 
       <Card className="p-1.5">
         {lookupError ? <p className="px-3 pt-3 text-sm text-destructive">{lookupError}</p> : null}
@@ -1330,9 +1298,11 @@ const PropertiesList = () => {
                     alt={`${currentDialogStory.created_by_name} story`}
                     className="h-full w-full bg-black object-cover"
                     onLoad={() => {
+                      setImageStoryLoaded(true);
                       setStoryPlaybackError(null);
                     }}
                     onError={() => {
+                      setImageStoryLoaded(false);
                       setStoryPlaybackError("This story cannot be displayed right now.");
                     }}
                   />

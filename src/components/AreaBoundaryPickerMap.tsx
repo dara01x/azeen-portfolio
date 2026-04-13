@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Feature, FeatureCollection } from "geojson";
 import type { AreaBoundaryPoint } from "@/modules/app-variables/types";
 import { DUHOK_DEFAULT_CENTER } from "@/lib/constants/map";
@@ -162,6 +162,7 @@ export function AreaBoundaryPickerMap({
   const markersRef = useRef<MapLibreMarker[]>([]);
   const pointsRef = useRef(points);
   const onChangeRef = useRef(onChange);
+  const [mapReadyTick, setMapReadyTick] = useState(0);
 
   useEffect(() => {
     pointsRef.current = points;
@@ -235,6 +236,7 @@ export function AreaBoundaryPickerMap({
       });
 
       mapRef.current = map;
+      setMapReadyTick((value) => value + 1);
     }
 
     void initMap();
@@ -307,7 +309,7 @@ export function AreaBoundaryPickerMap({
     }
 
     syncBoundary();
-  }, [points]);
+  }, [points, mapReadyTick]);
 
   return (
     <div className="h-[22rem] w-full overflow-hidden rounded-xl border shadow-sm">
