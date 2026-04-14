@@ -27,6 +27,9 @@ export function AppSidebar() {
   const { user } = useAuth();
   const collapsed = state === "collapsed";
   const visibleMainNav = user?.role === "company" ? mainNav.filter((item) => item.url !== "/users") : mainNav;
+  const navLinkSpacingClass = isMobile ? "mx-2 px-3.5 py-2.5" : "mx-2 px-3 py-2";
+  const navIconClass = isMobile ? "h-[18px] w-[18px] shrink-0" : "h-4 w-4 shrink-0";
+  const navTextClass = isMobile ? "text-[15px]" : "text-sm";
   const handleNavItemClick = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -58,20 +61,20 @@ export function AppSidebar() {
       <Separator className="mx-4 w-auto" />
       <SidebarContent className="pt-2">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/70 px-4">Main</SidebarGroupLabel>
+          <SidebarGroupLabel className={`${isMobile ? "text-xs" : "text-[11px]"} uppercase tracking-wider font-semibold text-muted-foreground/70 px-4`}>Main</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {visibleMainNav.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild onClick={handleNavItemClick}>
+                  <SidebarMenuButton asChild size={isMobile ? "lg" : "default"} onClick={handleNavItemClick}>
                     <NavLink
                       to={item.url}
                       end={item.url === "/"}
-                      className="rounded-lg mx-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      className={`rounded-lg ${navLinkSpacingClass} text-muted-foreground hover:text-foreground hover:bg-accent transition-colors`}
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span className="text-sm">{item.title}</span>}
+                      <item.icon className={navIconClass} />
+                      {!collapsed && <span className={navTextClass}>{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -80,19 +83,19 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground/70 px-4">System</SidebarGroupLabel>
+          <SidebarGroupLabel className={`${isMobile ? "text-xs" : "text-[11px]"} uppercase tracking-wider font-semibold text-muted-foreground/70 px-4`}>System</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {systemNav.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild onClick={handleNavItemClick}>
+                  <SidebarMenuButton asChild size={isMobile ? "lg" : "default"} onClick={handleNavItemClick}>
                     <NavLink
                       to={item.url}
-                      className="rounded-lg mx-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      className={`rounded-lg ${navLinkSpacingClass} text-muted-foreground hover:text-foreground hover:bg-accent transition-colors`}
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span className="text-sm">{item.title}</span>}
+                      <item.icon className={navIconClass} />
+                      {!collapsed && <span className={navTextClass}>{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
