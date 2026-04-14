@@ -652,14 +652,28 @@ const PropertyForm = () => {
         </FormSection>
 
         <FormSection title="Pricing" description="Set the pricing details">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-2"><RequiredLabel>Price</RequiredLabel><Input type="text" inputMode="numeric" value={formatPriceInput(form.price)} onChange={e => update("price", parsePriceInput(e.target.value))} placeholder="0" /></div>
-            <div className="space-y-2"><Label>Currency (Optional)</Label>
-              <Select value={form.currency} onValueChange={v => update("currency", v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="USD">USD</SelectItem><SelectItem value="IQD">IQD</SelectItem></SelectContent>
-              </Select>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <RequiredLabel>Price</RequiredLabel>
+              <div className="inline-flex items-center rounded-md border bg-muted/40 p-0.5">
+                {(["USD", "IQD"] as const).map((currencyOption) => (
+                  <button
+                    key={currencyOption}
+                    type="button"
+                    onClick={() => update("currency", currencyOption)}
+                    className={`h-7 min-w-[46px] rounded px-2 text-[11px] font-semibold transition-colors ${
+                      form.currency === currencyOption
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    aria-pressed={form.currency === currencyOption}
+                  >
+                    {currencyOption}
+                  </button>
+                ))}
+              </div>
             </div>
+            <Input type="text" inputMode="numeric" value={formatPriceInput(form.price)} onChange={e => update("price", parsePriceInput(e.target.value))} placeholder="0" />
           </div>
         </FormSection>
 
