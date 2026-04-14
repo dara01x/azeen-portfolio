@@ -115,3 +115,13 @@ export async function uploadStoryVideo(file: File): Promise<string> {
 
   return uploadResult.url;
 }
+
+export async function deleteStory(id: string): Promise<void> {
+  await authorizedJsonFetch<{ success: boolean }>(
+    "/api/stories/delete",
+    {
+      method: "DELETE",
+    },
+    { id },
+  );
+}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, RotateCcw, Search, SlidersHorizontal, Volume2, VolumeX, X } from "lucide-react";
+import { Plus, RotateCcw, Search, SlidersHorizontal, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -27,7 +27,7 @@ import {
   deleteProperty as deletePropertyById,
   getProperties as fetchProperties,
 } from "@/modules/properties/property.client";
-import { createStory, getStories, uploadStoryMedia } from "@/modules/stories/story.client";
+import { createStory, deleteStory as deleteStoryById, getStories, uploadStoryMedia } from "@/modules/stories/story.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import { useAuth } from "@/lib/auth/useAuth";
 import type { Property, Story } from "@/types";
@@ -187,6 +187,9 @@ const PropertiesList = () => {
   const [storyDialogOpen, setStoryDialogOpen] = useState(false);
   const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
+  const [deletingStoryId, setDeletingStoryId] = useState<string | null>(null);
+  const [storyDeleteDialogOpen, setStoryDeleteDialogOpen] = useState(false);
+  const [storyDeleteTarget, setStoryDeleteTarget] = useState<{ id: string; createdByName: string } | null>(null);
   const [storyPlaybackProgress, setStoryPlaybackProgress] = useState(0);
   const [imageStoryLoaded, setImageStoryLoaded] = useState(false);
   const [storyMuted, setStoryMuted] = useState(true);
@@ -550,6 +553,10 @@ const PropertiesList = () => {
   const canPublishStory = !!user && (user.role === "admin" || user.role === "company");
   const currentDialogStory = activeStoryGroup?.stories[activeStoryIndex] || null;
   const currentDialogStoryMedia = currentDialogStory ? resolveStoryMedia(currentDialogStory) : null;
+  const canDeleteCurrentStory =
+    !!currentDialogStory &&
+    !!user &&
+    (user.role === "admin" || currentDialogStory.created_by_uid === user.uid);
   const isCurrentDialogImageStory = currentDialogStoryMedia?.type === "image";
   const canGoNextStory =
     !!activeStoryGroup && activeStoryIndex < activeStoryGroup.stories.length - 1;
@@ -806,6 +813,56 @@ const PropertiesList = () => {
     }
 
     setStoryDialogOpen(false);
+  }
+
+  function openDeleteCurrentStoryDialog() {
+    if (!currentDialogStory || !canDeleteCurrentStory || deletingStoryId) {
+      return;
+    }
+
+    setStoryDeleteTarget({
+      id: currentDialogStory.id,
+      createdByName: currentDialogStory.created_by_name,
+    });
+    setStoryDeleteDialogOpen(true);
+  }
+
+  async function handleConfirmDeleteCurrentStory() {
+    if (!storyDeleteTarget || deletingStoryId) {
+      return;
+    }
+
+    const storyId = storyDeleteTarget.id;
+    setDeletingStoryId(storyId);
+    setStoryError(null);
+
+    try {
+      await deleteStoryById(storyId);
+
+      setStories((current) => current.filter((story) => story.id !== storyId));
+      setStoryDialogOpen(false);
+      setActiveStoryGroup(null);
+      setActiveStoryIndex(0);
+      setStoryDeleteDialogOpen(false);
+      setStoryDeleteTarget(null);
+      toast.success("Story deleted.");
+    } catch (storyDeleteError) {
+      const message =
+        storyDeleteError instanceof Error
+          ? storyDeleteError.message
+          : "Failed to delete story.";
+
+      setStoryError(message);
+      toast.error(message, {
+        style: {
+          background: "hsl(var(--destructive))",
+          color: "hsl(var(--destructive-foreground))",
+          borderColor: "hsl(var(--destructive))",
+        },
+      });
+    } finally {
+      setDeletingStoryId(null);
+    }
   }
 
   useEffect(() => {
@@ -1261,6 +1318,8 @@ const PropertiesList = () => {
           if (!open) {
             setActiveStoryGroup(null);
             setActiveStoryIndex(0);
+            setStoryDeleteDialogOpen(false);
+            setStoryDeleteTarget(null);
           }
         }}
       >
@@ -1381,6 +1440,21 @@ const PropertiesList = () => {
                     </div>
 
                     <div className="flex items-center gap-1">
+                      {canDeleteCurrentStory ? (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-full bg-red-600/70 text-white hover:bg-red-600 hover:text-white"
+                          onClick={() => {
+                            openDeleteCurrentStoryDialog();
+                          }}
+                          disabled={deletingStoryId === currentDialogStory.id}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+
                       {currentDialogStoryMedia?.type === "video" ? (
                         <Button
                           type="button"
@@ -1445,6 +1519,44 @@ const PropertiesList = () => {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={storyDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (deletingStoryId) {
+            return;
+          }
+
+          setStoryDeleteDialogOpen(open);
+
+          if (!open) {
+            setStoryDeleteTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Story Permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove this story and permanently delete its media from storage.
+              {storyDeleteTarget?.createdByName ? ` Created by ${storyDeleteTarget.createdByName}.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!deletingStoryId}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!!deletingStoryId}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmDeleteCurrentStory();
+              }}
+            >
+              {deletingStoryId ? "Deleting..." : "Delete Story"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={deleteDialog.open}

@@ -3,12 +3,22 @@ import { Building2, Users, FolderKanban, ArrowUpRight, Plus, ChevronLeft, Chevro
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth/useAuth";
 import { getProperties } from "@/modules/properties/property.client";
 import { getProjects } from "@/modules/projects/project.client";
 import { getClients } from "@/modules/clients/client.client";
-import { createStory, getStories, uploadStoryMedia } from "@/modules/stories/story.client";
+import { createStory, deleteStory as deleteStoryById, getStories, uploadStoryMedia } from "@/modules/stories/story.client";
 import { PageHeader } from "@/components/PageHeader";
 import type { Client, Project, Property, Story } from "@/types";
 
@@ -102,6 +112,9 @@ const Dashboard = () => {
   const [storyDialogOpen, setStoryDialogOpen] = useState(false);
   const [activeStoryGroup, setActiveStoryGroup] = useState<StoryGroup | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
+  const [deletingStoryId, setDeletingStoryId] = useState<string | null>(null);
+  const [storyDeleteDialogOpen, setStoryDeleteDialogOpen] = useState(false);
+  const [storyDeleteTarget, setStoryDeleteTarget] = useState<{ id: string; createdByName: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [storyError, setStoryError] = useState<string | null>(null);
 
@@ -216,6 +229,10 @@ const Dashboard = () => {
 
   const canPublishStory = !!user && (user.role === "admin" || user.role === "company");
   const currentDialogStory = activeStoryGroup?.stories[activeStoryIndex] || null;
+  const canDeleteCurrentStory =
+    !!currentDialogStory &&
+    !!user &&
+    (user.role === "admin" || currentDialogStory.created_by_uid === user.uid);
   const canGoPreviousStory = activeStoryIndex > 0;
   const canGoNextStory =
     !!activeStoryGroup && activeStoryIndex < activeStoryGroup.stories.length - 1;
@@ -332,6 +349,46 @@ const Dashboard = () => {
 
       return current < activeStoryGroup.stories.length - 1 ? current + 1 : current;
     });
+  }
+
+  function openDeleteCurrentStoryDialog() {
+    if (!currentDialogStory || !canDeleteCurrentStory || deletingStoryId) {
+      return;
+    }
+
+    setStoryDeleteTarget({
+      id: currentDialogStory.id,
+      createdByName: currentDialogStory.created_by_name,
+    });
+    setStoryDeleteDialogOpen(true);
+  }
+
+  async function handleConfirmDeleteCurrentStory() {
+    if (!storyDeleteTarget || deletingStoryId) {
+      return;
+    }
+
+    const storyId = storyDeleteTarget.id;
+    setDeletingStoryId(storyId);
+    setStoryError(null);
+
+    try {
+      await deleteStoryById(storyId);
+      setStories((current) => current.filter((story) => story.id !== storyId));
+      setStoryDialogOpen(false);
+      setActiveStoryGroup(null);
+      setActiveStoryIndex(0);
+      setStoryDeleteDialogOpen(false);
+      setStoryDeleteTarget(null);
+    } catch (storyDeleteError) {
+      const message =
+        storyDeleteError instanceof Error
+          ? storyDeleteError.message
+          : "Failed to delete story.";
+      setStoryError(message);
+    } finally {
+      setDeletingStoryId(null);
+    }
   }
 
   return (
@@ -469,6 +526,8 @@ const Dashboard = () => {
           if (!open) {
             setActiveStoryGroup(null);
             setActiveStoryIndex(0);
+            setStoryDeleteDialogOpen(false);
+            setStoryDeleteTarget(null);
           }
         }}
       >
@@ -507,6 +566,21 @@ const Dashboard = () => {
                 <p className="text-xs text-muted-foreground capitalize">
                   {activeStoryGroup?.created_by_name} · {formatStoryAge(currentDialogStory.created_at)}
                 </p>
+                {canDeleteCurrentStory ? (
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        openDeleteCurrentStoryDialog();
+                      }}
+                      disabled={deletingStoryId === currentDialogStory.id}
+                    >
+                      {deletingStoryId === currentDialogStory.id ? "Deleting..." : "Delete Story"}
+                    </Button>
+                  </div>
+                ) : null}
                 {activeStoryGroup && activeStoryGroup.stories.length > 1 ? (
                   <div className="mt-3 flex items-center justify-between gap-2">
                     <Button
@@ -539,6 +613,44 @@ const Dashboard = () => {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={storyDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (deletingStoryId) {
+            return;
+          }
+
+          setStoryDeleteDialogOpen(open);
+
+          if (!open) {
+            setStoryDeleteTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Story Permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove this story and permanently delete its media from storage.
+              {storyDeleteTarget?.createdByName ? ` Created by ${storyDeleteTarget.createdByName}.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!deletingStoryId}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!!deletingStoryId}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmDeleteCurrentStory();
+              }}
+            >
+              {deletingStoryId ? "Deleting..." : "Delete Story"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

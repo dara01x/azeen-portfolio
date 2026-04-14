@@ -6,6 +6,11 @@ type StoryWriteInput = Partial<Story>;
 
 type StoryMediaType = "video" | "image";
 
+type StoryDeleteScope = {
+  uid: string;
+  role: "admin" | "company";
+};
+
 type StoryActor = {
   uid: string;
   role: Story["created_by_role"];
@@ -182,28 +187,44 @@ function extractStoryMediaUrls(data: Record<string, unknown>) {
   ]);
 }
 
+async function deleteStoryMediaFromStorage(data: Record<string, unknown>) {
+  const bucket = getAdminStorageBucket();
+  const mediaObjectPaths = asUniqueStrings(
+    extractStoryMediaUrls(data)
+      .map((urlValue) => tryParseStorageObjectPath(urlValue, bucket.name) || "")
+      .filter(Boolean),
+  );
+
+  for (const objectPath of mediaObjectPaths) {
+    try {
+      await bucket.file(objectPath).delete({ ignoreNotFound: true });
+    } catch (error) {
+      if (!isNotFoundStorageError(error)) {
+        throw error;
+      }
+    }
+  }
+}
+
+function assertStoryDeleteAccess(data: Record<string, unknown>, scope?: StoryDeleteScope) {
+  if (!scope || scope.role === "admin") {
+    return;
+  }
+
+  const createdByUid = asString(data.created_by_uid).trim();
+
+  if (!createdByUid || createdByUid !== scope.uid) {
+    throw new Error("Forbidden.");
+  }
+}
+
 async function cleanupExpiredStories(now: Timestamp) {
   const db = getAdminDb();
-  const bucket = getAdminStorageBucket();
   const snapshot = await db.collection("stories").where("expires_at", "<=", now).get();
 
   for (const storyDoc of snapshot.docs) {
     const storyData = storyDoc.data() || {};
-    const mediaObjectPaths = asUniqueStrings(
-      extractStoryMediaUrls(storyData)
-        .map((urlValue) => tryParseStorageObjectPath(urlValue, bucket.name) || "")
-        .filter(Boolean),
-    );
-
-    for (const objectPath of mediaObjectPaths) {
-      try {
-        await bucket.file(objectPath).delete({ ignoreNotFound: true });
-      } catch (error) {
-        if (!isNotFoundStorageError(error)) {
-          throw error;
-        }
-      }
-    }
+    await deleteStoryMediaFromStorage(storyData);
 
     await storyDoc.ref.delete();
   }
@@ -314,4 +335,25 @@ export async function getActiveStories(): Promise<Story[]> {
     .filter((story) => !!((story.media_url || story.video_url || story.image_url || "").trim()));
 
   return stories.sort((a, b) => parseIsoTime(b.created_at) - parseIsoTime(a.created_at));
+}
+
+export async function deleteStory(id: string, scope?: StoryDeleteScope): Promise<void> {
+  const storyId = id.trim();
+
+  if (!storyId) {
+    throw new Error("Story id is required.");
+  }
+
+  const db = getAdminDb();
+  const docRef = db.collection("stories").doc(storyId);
+  const existingDoc = await docRef.get();
+
+  if (!existingDoc.exists) {
+    throw new Error("Story not found.");
+  }
+
+  const storyData = (existingDoc.data() || {}) as Record<string, unknown>;
+  assertStoryDeleteAccess(storyData, scope);
+  await deleteStoryMediaFromStorage(storyData);
+  await docRef.delete();
 }
