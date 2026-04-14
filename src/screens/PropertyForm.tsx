@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -29,6 +29,7 @@ import {
   getPropertyById,
   updateProperty,
   uploadPropertyImageBlobUrls,
+  uploadPropertyVideoFile,
 } from "@/modules/properties/property.client";
 import { getUsers as fetchUsers } from "@/modules/users/user.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
@@ -56,6 +57,7 @@ type LocalImageFileMap = Record<string, File>;
 type PropertyFormState = Omit<Property, "id" | "listing_type" | "ownership_type" | "payment_type">;
 
 const OPTIONAL_LINK_NONE = "__none__";
+const MAX_PROPERTY_VIDEO_FILE_SIZE_BYTES = 30 * 1024 * 1024;
 
 const TOWER_NUMBER_TYPE_KEYWORDS = ["apartment", "department", "villa", "شقة", "فيلا"];
 
@@ -246,8 +248,58 @@ const PropertyForm = () => {
   const [areas, setAreas] = useState<City[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
+  const [localVideoFile, setLocalVideoFile] = useState<File | null>(null);
+  const [localVideoPreviewUrl, setLocalVideoPreviewUrl] = useState("");
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
   const canViewAgentContact = user?.role === "admin";
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(prev => ({ ...prev, [key]: value }));
+  const activeVideoUrl = localVideoPreviewUrl || form.video_url || "";
+
+  const clearLocalVideoSelection = () => {
+    setLocalVideoFile(null);
+    setLocalVideoPreviewUrl((current) => {
+      if (current.startsWith("blob:")) {
+        URL.revokeObjectURL(current);
+      }
+
+      return "";
+    });
+
+    if (videoInputRef.current) {
+      videoInputRef.current.value = "";
+    }
+  };
+
+  const handleVideoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) {
+      return;
+    }
+
+    if (!selectedFile.type.startsWith("video/")) {
+      setError("Please select a valid video file.");
+      event.target.value = "";
+      return;
+    }
+
+    if (selectedFile.size > MAX_PROPERTY_VIDEO_FILE_SIZE_BYTES) {
+      setError("Video is too large. Please use a file up to 30MB.");
+      event.target.value = "";
+      return;
+    }
+
+    setError(null);
+    setLocalVideoFile(selectedFile);
+    update("video_url", "");
+
+    setLocalVideoPreviewUrl((current) => {
+      if (current.startsWith("blob:")) {
+        URL.revokeObjectURL(current);
+      }
+
+      return URL.createObjectURL(selectedFile);
+    });
+  };
   const selectedCoordinates = useMemo<CoordinatesValue | null>(() => {
     if (typeof form.lat === "number" && Number.isFinite(form.lat) && typeof form.lng === "number" && Number.isFinite(form.lng)) {
       return { lat: form.lat, lng: form.lng };
@@ -271,6 +323,14 @@ const PropertyForm = () => {
     () => Array.from(new Set(areas.map((item) => item.name.trim()).filter(Boolean))),
     [areas],
   );
+
+  useEffect(() => {
+    return () => {
+      if (localVideoPreviewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(localVideoPreviewUrl);
+      }
+    };
+  }, [localVideoPreviewUrl]);
 
   useEffect(() => {
     if (authLoading || !user) {
@@ -344,6 +404,7 @@ const PropertyForm = () => {
     if (!isEdit) {
       setLoading(false);
       setLocalImageFiles({});
+      clearLocalVideoSelection();
       return;
     }
 
@@ -368,6 +429,7 @@ const PropertyForm = () => {
         }
 
         setLocalImageFiles({});
+        clearLocalVideoSelection();
         const {
           id: _id,
           listing_type: _listingType,
@@ -409,6 +471,7 @@ const PropertyForm = () => {
         URL.revokeObjectURL(imageUrl);
       });
       setLocalImageFiles({});
+      clearLocalVideoSelection();
 
       setDeleteDialogOpen(false);
       toast.success("Property deleted successfully.");
@@ -499,8 +562,13 @@ const PropertyForm = () => {
 
       const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeLocalFiles);
       const preferredMainImage = resolvePreferredMainImage(payload.main_image, payload.images);
+      let resolvedVideoUrl = (payload.video_url || "").trim();
 
       if (isEdit && id) {
+        if (localVideoFile) {
+          resolvedVideoUrl = await uploadPropertyVideoFile(id, localVideoFile);
+        }
+
         const newlyUploadedImages = await uploadPropertyImageBlobUrls(id, localBlobImages, activeLocalFiles);
         if (localBlobImages.length > 0 && newlyUploadedImages.length === 0) {
           throw new Error("Image upload did not complete. Please reselect images and try again.");
@@ -518,6 +586,7 @@ const PropertyForm = () => {
           ...payload,
           images: allImages,
           main_image: selectedMainImage || allImages[0],
+          video_url: resolvedVideoUrl,
         });
       } else {
         const initialMainImage =
@@ -529,7 +598,12 @@ const PropertyForm = () => {
           ...payload,
           images: uploadedImages,
           main_image: initialMainImage,
+          video_url: resolvedVideoUrl || undefined,
         });
+
+        if (localVideoFile) {
+          resolvedVideoUrl = await uploadPropertyVideoFile(created.id, localVideoFile);
+        }
 
         const newlyUploadedImages = await uploadPropertyImageBlobUrls(
           created.id,
@@ -542,7 +616,7 @@ const PropertyForm = () => {
 
         const allImages = [...uploadedImages, ...newlyUploadedImages];
 
-        if (allImages.length > 0) {
+        if (allImages.length > 0 || localVideoFile) {
           const selectedMainImage = resolveMainImageAfterUpload(
             preferredMainImage,
             uploadedImages,
@@ -554,6 +628,7 @@ const PropertyForm = () => {
             ...payload,
             images: allImages,
             main_image: selectedMainImage || allImages[0],
+            video_url: resolvedVideoUrl,
           });
         }
       }
@@ -563,6 +638,7 @@ const PropertyForm = () => {
       });
 
       setLocalImageFiles({});
+  clearLocalVideoSelection();
 
       router.push("/properties");
     } catch (submitError) {
@@ -749,7 +825,7 @@ const PropertyForm = () => {
           </div>
         </FormSection>
 
-        <FormSection title="Media" description="Upload property images">
+        <FormSection title="Media" description="Upload property images and video">
           <div className="space-y-5">
             <div>
               <Label className="mb-3 block">Images (Optional)</Label>
@@ -792,6 +868,47 @@ const PropertyForm = () => {
                   update("main_image", nextMainImage);
                 }}
               />
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <Label className="block">Video (Optional)</Label>
+              <Input
+                ref={videoInputRef}
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/*"
+                onChange={handleVideoFileChange}
+              />
+              <p className="text-xs text-muted-foreground">Supported: MP4, MOV, WEBM, MKV. Max 30MB.</p>
+
+              {activeVideoUrl ? (
+                <div className="space-y-2">
+                  <video
+                    className="w-full max-h-64 rounded-md border bg-black object-contain"
+                    src={activeVideoUrl}
+                    controls
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        clearLocalVideoSelection();
+                        update("video_url", "");
+                      }}
+                    >
+                      Remove Video
+                    </Button>
+                    {localVideoFile ? (
+                      <p className="text-xs text-muted-foreground truncate">{localVideoFile.name}</p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No video uploaded.</p>
+              )}
             </div>
           </div>
         </FormSection>

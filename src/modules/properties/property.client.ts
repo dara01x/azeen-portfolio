@@ -15,8 +15,25 @@ type PropertyApiItem = Property & {
 };
 
 const MAX_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024;
+const MAX_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES = 30 * 1024 * 1024;
 
 function extensionFromMimeType(contentType: string) {
+  if (contentType.includes("mp4")) {
+    return "mp4";
+  }
+
+  if (contentType.includes("webm")) {
+    return "webm";
+  }
+
+  if (contentType.includes("quicktime")) {
+    return "mov";
+  }
+
+  if (contentType.includes("x-matroska")) {
+    return "mkv";
+  }
+
   if (contentType.includes("jpeg") || contentType.includes("jpg")) {
     return "jpg";
   }
@@ -177,4 +194,61 @@ export async function uploadPropertyImageBlobUrls(
   }
 
   return uploadedUrls;
+}
+
+export async function uploadPropertyVideoFile(propertyId: string, file: File): Promise<string> {
+  if (!propertyId) {
+    throw new Error("Property id is required for video upload.");
+  }
+
+  if (!(file instanceof File)) {
+    throw new Error("Video file is required.");
+  }
+
+  if (!file.type.startsWith("video/")) {
+    throw new Error("Please select a valid video file.");
+  }
+
+  if (file.size > MAX_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES) {
+    throw new Error("Video is too large. Please use a file up to 30MB.");
+  }
+
+  const idToken = await auth.currentUser?.getIdToken();
+  const headers = new Headers();
+
+  if (idToken) {
+    headers.set("Authorization", `Bearer ${idToken}`);
+  }
+
+  const formData = new FormData();
+  formData.append("propertyId", propertyId);
+  formData.append("file", file, file.name || `property-video.${extensionFromMimeType(file.type || "video/mp4")}`);
+
+  const response = await fetch("/api/properties/upload-video", {
+    method: "POST",
+    headers,
+    body: formData,
+    cache: "no-store",
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    if (response.status === 413) {
+      throw new Error("Video upload request is too large. Please upload a smaller video (up to 30MB).");
+    }
+
+    const message =
+      typeof payload?.error === "string"
+        ? payload.error
+        : `Property video upload failed (${response.status}).`;
+    throw new Error(message);
+  }
+
+  const uploadedUrl = typeof payload?.url === "string" ? payload.url : "";
+  if (!uploadedUrl) {
+    throw new Error("Property video upload did not return a valid URL.");
+  }
+
+  return uploadedUrl;
 }

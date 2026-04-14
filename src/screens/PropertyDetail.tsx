@@ -498,6 +498,33 @@ const PropertyDetail = () => {
                 )}
               </CardContent>
             </Card>
+
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Video</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {property.video_url ? (
+                  <>
+                    <video
+                      className="w-full max-h-72 rounded-xl border bg-black object-contain"
+                      src={property.video_url}
+                      controls
+                    />
+                    <a
+                      href={property.video_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-primary hover:underline break-all"
+                    >
+                      Open video in new tab
+                    </a>
+                  </>
+                ) : (
+                  <p className="text-slate-400 text-sm italic">No video uploaded.</p>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           <div className="space-y-6">
