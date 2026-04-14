@@ -689,7 +689,7 @@ const PropertyForm = () => {
               ) : null}
             </div>
             <div className="sm:col-span-2 space-y-2">
-              <Label>Plot Number (Optional)</Label>
+              <Label>Property Number (Optional)</Label>
               <Input
                 value={getPreferredText(form.address_en, form.address_ku, form.address_ar)}
                 onChange={(e) => {
@@ -698,7 +698,7 @@ const PropertyForm = () => {
                   update("address_ku", value);
                   update("address_ar", value);
                 }}
-                placeholder="Enter plot number"
+                placeholder="Enter property number"
               />
             </div>
             <Separator className="sm:col-span-2" />

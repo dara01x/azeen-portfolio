@@ -529,7 +529,7 @@ const PropertyDetail = () => {
               <CardContent className="p-5">
                 <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Building Info</p>
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Land Number" value={property.land_number} />
+                  <Field label="Property Number" value={property.land_number} />
                   <Field label="Unit Floor Number" value={property.unit_floor_number} />
                   <Field label="Tower Number" value={property.tower_number} />
                 </div>
