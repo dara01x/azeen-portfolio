@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Bath, BedDouble, ChevronLeft, ChevronRight, Edit, Eye, Home, Maximize, Video } from "lucide-react";
+import { ArrowLeft, Bath, BedDouble, ChevronLeft, ChevronRight, Edit, Eye, Home, Maximize } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -306,7 +306,6 @@ const ProjectDetail = () => {
     project.description_ar,
   );
   const notesLabel = firstNonEmpty(project.internal_notes);
-  const videoUrl = firstNonEmpty(project.video_url);
   const assignedCompany = project.assigned_company_id
     ? users.find((item) => item.id === project.assigned_company_id && item.role === "company")
     : undefined;
@@ -367,10 +366,9 @@ const ProjectDetail = () => {
   const showDescriptionCard = !!descriptionLabel;
   const showNotesCard = !!notesLabel;
   const showTypesCard = typeNames.length > 0;
-  const showVideoCard = !!videoUrl;
   const showRelationsCard = relationItems.length > 0;
   const showLeftColumn = showLocationCard || showDescriptionCard || showNotesCard;
-  const showRightColumn = showTypesCard || showVideoCard || showRelationsCard;
+  const showRightColumn = showTypesCard || showRelationsCard;
   const getUnitTypeLabel = (typeId?: string) => (typeId ? findVariableName(propertyTypes, typeId) : "No type");
   const closeUnitView = () => {
     setIsUnitImageZoomOpen(false);
@@ -580,29 +578,6 @@ const ProjectDetail = () => {
                             {typeName}
                           </span>
                         ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : null}
-
-                {showVideoCard ? (
-                  <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-                    <CardContent className="p-5 space-y-4">
-                      <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3">Media</p>
-
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-slate-400 uppercase tracking-wider inline-flex items-center gap-1.5">
-                          <Video className="h-3.5 w-3.5" />
-                          Video URL
-                        </p>
-                        <a
-                          href={videoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm font-medium text-primary hover:underline break-all"
-                        >
-                          {videoUrl}
-                        </a>
                       </div>
                     </CardContent>
                   </Card>

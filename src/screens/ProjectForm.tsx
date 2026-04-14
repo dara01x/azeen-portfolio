@@ -858,7 +858,6 @@ const ProjectForm = () => {
         area_size: Number(form.area_size) || 0,
         starting_price: Number(form.starting_price) || 0,
         assigned_company_id: form.assigned_company_id || undefined,
-        video_url: form.video_url?.trim() || undefined,
         internal_notes: (form.internal_notes || "").trim(),
       };
 
@@ -1149,15 +1148,6 @@ const ProjectForm = () => {
                     update("images", images);
                     update("main_image", nextMainImage);
                   }}
-                />
-              </div>
-              <Separator />
-              <div className="space-y-2">
-                <Label>Video URL (Optional)</Label>
-                <Input
-                  value={form.video_url || ""}
-                  onChange={(e) => update("video_url", e.target.value)}
-                  placeholder="https://youtube.com/..."
                 />
               </div>
             </div>

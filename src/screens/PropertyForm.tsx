@@ -735,7 +735,7 @@ const PropertyForm = () => {
           </div>
         </FormSection>
 
-        <FormSection title="Media" description="Upload images and add video links">
+        <FormSection title="Media" description="Upload property images">
           <div className="space-y-5">
             <div>
               <Label className="mb-3 block">Images (Optional)</Label>
@@ -779,8 +779,6 @@ const PropertyForm = () => {
                 }}
               />
             </div>
-            <Separator />
-            <div className="space-y-2"><Label>Video URL (YouTube) (Optional)</Label><Input value={form.video_url || ""} onChange={e => update("video_url", e.target.value)} placeholder="https://youtube.com/watch?v=..." /></div>
           </div>
         </FormSection>
 

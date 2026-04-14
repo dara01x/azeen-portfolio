@@ -13,7 +13,6 @@ import {
   Layers3,
   PhoneCall,
   Ruler,
-  Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -551,32 +550,11 @@ const PropertyDetail = () => {
 
             <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
               <CardContent className="p-5 space-y-4">
-                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3">Pricing & Media</p>
+                <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3">Pricing</p>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Price" value={property.price.toLocaleString()} />
                   <Field label="Currency" value={property.currency} />
                   <Field label="Payment Type" value={paymentTypeLabel} />
-                </div>
-
-                <Separator />
-
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider inline-flex items-center gap-1.5">
-                    <Video className="h-3.5 w-3.5" />
-                    Video URL
-                  </p>
-                  {property.video_url ? (
-                    <a
-                      href={property.video_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-primary hover:underline break-all"
-                    >
-                      {property.video_url}
-                    </a>
-                  ) : (
-                    <p className="text-sm text-slate-400">No video attached.</p>
-                  )}
                 </div>
               </CardContent>
             </Card>
