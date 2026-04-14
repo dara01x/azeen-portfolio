@@ -513,9 +513,9 @@ const ProjectsList = () => {
                   <Select value={areaFilter} onValueChange={setAreaFilter}>
                     <SelectTrigger className="h-9 bg-muted/50 border-0"><SelectValue placeholder="Area" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Areas</SelectItem>
-                      {areaOptions.map((areaName) => (
-                        <SelectItem key={areaName} value={areaName}>{areaName}</SelectItem>
+                      <SelectItem className="my-1 rounded-md border border-border/60" value="all">All Areas</SelectItem>
+                      {areaOptions.map((areaName, index) => (
+                        <SelectItem className="my-1 rounded-md border border-border/60" key={areaName} value={areaName}>{index + 1}. {areaName}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

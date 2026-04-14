@@ -961,8 +961,8 @@ const PropertiesList = () => {
                 <SelectValue placeholder="Area" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Areas</SelectItem>
-                {areas.map((area) => <SelectItem key={area.id} value={area.name}>{area.name}</SelectItem>)}
+                <SelectItem className="my-1 rounded-md border border-border/60" value="all">All Areas</SelectItem>
+                {areas.map((area, index) => <SelectItem className="my-1 rounded-md border border-border/60" key={area.id} value={area.name}>{index + 1}. {area.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

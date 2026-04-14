@@ -208,7 +208,6 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
             <Table>
               <TableHeader>
                 <TableRow>
-                  {isAreaType ? <TableHead className="w-[64px] text-center">#</TableHead> : null}
                   <TableHead>Name</TableHead>
                   {isAreaType ? <TableHead className="w-[160px]">Map Boundary</TableHead> : null}
                   <TableHead className="w-[140px] text-right">Actions</TableHead>
@@ -217,18 +216,22 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
               <TableBody>
                 {items.length === 0 ? (
                   <TableRow>
-                    <TableCell className="text-sm text-muted-foreground" colSpan={isAreaType ? 4 : 2}>No values yet.</TableCell>
+                    <TableCell className="text-sm text-muted-foreground" colSpan={isAreaType ? 3 : 2}>No values yet.</TableCell>
                   </TableRow>
                 ) : items.map((item, index) => (
-                  <TableRow key={item.id} className={isAreaType ? "bg-background" : undefined}>
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      {isAreaType ? (
+                        <div className="inline-flex items-center gap-2 rounded-md border border-border/70 px-2 py-1">
+                          <span className="text-xs font-semibold text-muted-foreground">{index + 1}.</span>
+                          <span>{item.name}</span>
+                        </div>
+                      ) : (
+                        item.name
+                      )}
+                    </TableCell>
                     {isAreaType ? (
-                      <TableCell className="w-[64px] border-y border-l border-border text-center text-xs font-semibold text-muted-foreground">
-                        {index + 1}
-                      </TableCell>
-                    ) : null}
-                    <TableCell className={isAreaType ? "border-y border-border" : undefined}>{item.name}</TableCell>
-                    {isAreaType ? (
-                      <TableCell className="border-y border-border">
+                      <TableCell>
                         {normalizeAreaBoundaryPoints(item.area_boundary).length >= MIN_AREA_BOUNDARY_POINTS ? (
                           <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
                             Set
@@ -240,7 +243,7 @@ function VariableTable({ title, type }: { title: string; type: AppVariableType }
                         )}
                       </TableCell>
                     ) : null}
-                    <TableCell className={isAreaType ? "border-y border-r border-border" : undefined}>
+                    <TableCell>
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           type="button"

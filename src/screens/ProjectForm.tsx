@@ -1054,10 +1054,10 @@ const ProjectForm = () => {
                   <SelectTrigger><SelectValue placeholder="Select area" /></SelectTrigger>
                   <SelectContent>
                     {form.area.trim() && !areaNames.includes(form.area.trim()) ? (
-                      <SelectItem value={form.area}>Current: {form.area}</SelectItem>
+                      <SelectItem className="my-1 rounded-md border border-border/60" value={form.area}>Current: {form.area}</SelectItem>
                     ) : null}
-                    {areaNames.map((areaName) => (
-                      <SelectItem key={areaName} value={areaName}>{areaName}</SelectItem>
+                    {areaNames.map((areaName, index) => (
+                      <SelectItem className="my-1 rounded-md border border-border/60" key={areaName} value={areaName}>{index + 1}. {areaName}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
