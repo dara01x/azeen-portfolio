@@ -8,6 +8,8 @@ type ProjectApiItem = Project & {
   updated_at?: string | null;
 };
 
+const MAX_PROJECT_VIDEO_UPLOAD_SIZE_BYTES = 30 * 1024 * 1024;
+
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 type JsonObject = { [key: string]: JsonValue };
 
@@ -164,4 +166,49 @@ export async function uploadProjectImageBlobUrls(
   }
 
   return uploaded;
+}
+
+export async function uploadProjectVideoFile(projectId: string, file: File): Promise<string> {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("You must be signed in to upload videos.");
+  }
+
+  if (!(file instanceof File)) {
+    throw new Error("Video file is required.");
+  }
+
+  if (!file.type.startsWith("video/")) {
+    throw new Error("Please select a valid video file.");
+  }
+
+  if (file.size > MAX_PROJECT_VIDEO_UPLOAD_SIZE_BYTES) {
+    throw new Error("Video is too large. Please use a file up to 30MB.");
+  }
+
+  const token = await user.getIdToken();
+  const formData = new FormData();
+  formData.append("projectId", projectId);
+  formData.append("file", file, file.name || `project-video-${Date.now()}.mp4`);
+
+  const uploadResponse = await fetch("/api/projects/upload-video", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const uploadPayload = (await uploadResponse.json().catch(() => ({}))) as {
+    success?: boolean;
+    error?: string;
+    url?: string;
+  };
+
+  if (!uploadResponse.ok || !uploadPayload.success || !uploadPayload.url) {
+    throw new Error(uploadPayload.error || "Project video upload failed.");
+  }
+
+  return uploadPayload.url;
 }
