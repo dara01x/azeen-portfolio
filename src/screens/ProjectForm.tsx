@@ -37,12 +37,6 @@ const OPTIONAL_LINK_NONE = "__none__";
 const DIRECTION_OPTIONS = ["north", "east", "south", "west"];
 const MAX_PROJECT_VIDEO_FILE_SIZE_BYTES = 30 * 1024 * 1024;
 
-const PROJECT_STATUS_OPTIONS: Array<{ value: Project["status"]; label: string }> = [
-  { value: "active", label: "Active" },
-  { value: "completed", label: "Completed" },
-  { value: "archived", label: "Archived" },
-];
-
 function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   const uploadedImages: string[] = [];
   const localBlobImages: string[] = [];
@@ -106,10 +100,6 @@ function getPreferredText(...values: Array<string | undefined>) {
   }
 
   return "";
-}
-
-function isProjectStatus(value: string): value is Project["status"] {
-  return value === "active" || value === "completed" || value === "archived";
 }
 
 function createDefaultUnitOption(): UnitOption {
@@ -1058,25 +1048,6 @@ const ProjectForm = () => {
               <div className="sm:col-span-2 space-y-2">
                 <Label>Project Name *</Label>
                 <Input value={form.title} onChange={(e) => update("title", e.target.value)} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Status (Optional)</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(value) => {
-                    if (isProjectStatus(value)) {
-                      update("status", value);
-                    }
-                  }}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PROJECT_STATUS_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
 
               <div className="sm:col-span-2">

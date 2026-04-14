@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/EmptyState";
-import { StatusBadge } from "@/components/StatusBadge";
 import { getProjectById } from "@/modules/projects/project.client";
 import { getUnits } from "@/modules/units/unit.client";
 import { getUsers } from "@/modules/users/user.client";
@@ -39,16 +38,6 @@ function firstNonEmpty(...values: Array<string | undefined | null>) {
 
 function findVariableName(items: AppVariableItem[], id: string) {
   return items.find((item) => item.id === id)?.name || id;
-}
-
-function formatEnumLabel(value?: string | null) {
-  if (!value) {
-    return "";
-  }
-
-  return value
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getUnitOptions(unit: Unit): UnitOption[] {
@@ -296,7 +285,6 @@ const ProjectDetail = () => {
   const cityLabel = hasText(project.city_id) ? findVariableName(cities, project.city_id) : "";
   const typeNames = (project.property_type_ids || []).map((item) => findVariableName(propertyTypes, item));
   const typeLabel = typeNames.length > 0 ? typeNames.join(", ") : "";
-  const statusLabel = formatEnumLabel(project.status);
   const areaLabel = firstNonEmpty(project.area);
   const addressLabel = firstNonEmpty(project.address, project.address_en, project.address_ku, project.address_ar);
   const descriptionLabel = firstNonEmpty(
@@ -351,7 +339,6 @@ const ProjectDetail = () => {
   };
 
   const summaryItems = [
-    statusLabel ? { label: "Status", value: statusLabel } : null,
     cityLabel ? { label: "City", value: cityLabel } : null,
     typeLabel ? { label: "Property Types", value: typeLabel } : null,
     areaLabel ? { label: "Area", value: areaLabel } : null,
@@ -415,7 +402,6 @@ const ProjectDetail = () => {
 
           <div className="flex-1 min-w-0 flex items-center justify-center gap-2">
             <p className="font-semibold text-slate-800 truncate">{project.title}</p>
-            {statusLabel ? <StatusBadge status={project.status} /> : null}
           </div>
 
           <Button asChild className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium">
