@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, RotateCcw, Search, SlidersHorizontal, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { Building2, Map as MapIcon, Plus, RotateCcw, Search, Share2, SlidersHorizontal, Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -561,6 +561,8 @@ const PropertiesList = () => {
   }, [activeStories]);
 
   const canPublishStory = !!user && (user.role === "admin" || user.role === "company");
+  const canManageProperties = !!user && user.role !== "viewer";
+  const showMobileActionBar = canPublishStory || canManageProperties;
   const currentDialogStory = activeStoryGroup?.stories[activeStoryIndex] || null;
   const currentDialogStoryMedia = currentDialogStory ? resolveStoryMedia(currentDialogStory) : null;
   const canDeleteCurrentStory =
@@ -706,6 +708,10 @@ const PropertiesList = () => {
   }
 
   const openSingleDeleteDialog = (property: Property) => {
+    if (!canManageProperties) {
+      return;
+    }
+
     if (deletingIdSet.has(property.id)) {
       return;
     }
@@ -714,6 +720,10 @@ const PropertiesList = () => {
   };
 
   const openSelectedDeleteDialog = () => {
+    if (!canManageProperties) {
+      return;
+    }
+
     if (selectedPropertyIds.length === 0) {
       return;
     }
@@ -721,11 +731,73 @@ const PropertiesList = () => {
     openDeleteDialog(selectedPropertyIds);
   };
 
+  async function handleShareProperty(property: Property) {
+    const shareUrl =
+      typeof window === "undefined"
+        ? `/properties/${property.id}`
+        : `${window.location.origin}/properties/${property.id}`;
+    const shareTitle = property.title.trim() || "Property";
+
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share({
+          title: shareTitle,
+          text: `Property: ${shareTitle}`,
+          url: shareUrl,
+        });
+        return;
+      }
+
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success("Property link copied.");
+        return;
+      }
+
+      window.prompt("Copy property link:", shareUrl);
+    } catch (error) {
+      const isAbortError =
+        typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        (error as { name?: string }).name === "AbortError";
+
+      if (isAbortError) {
+        return;
+      }
+
+      try {
+        if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(shareUrl);
+          toast.success("Property link copied.");
+          return;
+        }
+      } catch {
+        // Ignore clipboard fallback errors and use manual copy fallback.
+      }
+
+      window.prompt("Copy property link:", shareUrl);
+    }
+  }
+
   function togglePropertyNotes(propertyId: string) {
     setExpandedPropertyNotes((current) => ({
       ...current,
       [propertyId]: !current[propertyId],
     }));
+  }
+
+  function scrollToMapSection() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const section = document.getElementById("properties-map-section");
+    if (!section) {
+      return;
+    }
+
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function handleConfirmDeleteDialog() {
@@ -926,7 +998,7 @@ const PropertiesList = () => {
   ]);
 
   return (
-    <div>
+    <div className="pb-24 sm:pb-0">
       {storyError ? <p className="mb-4 text-sm text-destructive">{storyError}</p> : null}
 
       <Card className="mb-4 overflow-hidden border-0 bg-gradient-to-br from-slate-50 via-white to-rose-50/60 shadow-sm">
@@ -936,7 +1008,12 @@ const PropertiesList = () => {
             <p className="mt-1 text-sm font-medium text-slate-700">Tap a story bubble to view.</p>
           </div>
           {canPublishStory ? (
-            <Button size="sm" className="rounded-full px-4" onClick={openStoryFilePicker} disabled={uploadingStory}>
+            <Button
+              size="sm"
+              className="hidden rounded-full px-4 sm:inline-flex"
+              onClick={openStoryFilePicker}
+              disabled={uploadingStory}
+            >
               <Plus className="mr-1.5 h-4 w-4" />
               {uploadingStory ? "Uploading..." : "Add Story"}
             </Button>
@@ -1013,10 +1090,17 @@ const PropertiesList = () => {
         <PageHeader
           title="Properties"
           description="Manage your property listings"
-          actions={<Button asChild><Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link></Button>}
+          actions={
+            canManageProperties ? (
+              <Button className="hidden sm:inline-flex" asChild>
+                <Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link>
+              </Button>
+            ) : undefined
+          }
         />
       </div>
 
+      <div id="properties-map-section">
       <Card className="mb-4">
         <div className="flex flex-col gap-3 border-b px-4 py-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -1056,6 +1140,7 @@ const PropertiesList = () => {
           )}
         </div>
       </Card>
+      </div>
 
       <Card className="p-1.5">
         {lookupError ? <p className="px-3 pt-3 text-sm text-destructive">{lookupError}</p> : null}
@@ -1158,7 +1243,7 @@ const PropertiesList = () => {
             </PopoverContent>
           </Popover>
         </div>
-        {selectedPropertyIds.length > 0 ? (
+        {canManageProperties && selectedPropertyIds.length > 0 ? (
           <div className="px-3 pt-2">
             <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
               <p className="text-xs text-muted-foreground">{selectedPropertyIds.length} selected</p>
@@ -1189,19 +1274,29 @@ const PropertiesList = () => {
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-6">
-            <EmptyState title="No properties found" description="Try adjusting your filters or add a new property." action={<Button asChild><Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link></Button>} />
+            <EmptyState
+              title="No properties found"
+              description="Try adjusting your filters or add a new property."
+              action={
+                canManageProperties ? (
+                  <Button asChild><Link href="/properties/new"><Plus className="mr-2 h-4 w-4" />Add Property</Link></Button>
+                ) : undefined
+              }
+            />
           </div>
         ) : (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
-                  onCheckedChange={toggleSelectAllVisible}
-                  aria-label="Select all properties on current page"
-                />
-                <span className="text-xs text-muted-foreground">Select all on this page</span>
-              </div>
+              {canManageProperties ? (
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAllVisible}
+                    aria-label="Select all properties on current page"
+                  />
+                  <span className="text-xs text-muted-foreground">Select all on this page</span>
+                </div>
+              ) : <div />}
               <p className="text-xs text-muted-foreground">{paginatedProperties.length} cards on this page</p>
             </div>
 
@@ -1237,13 +1332,15 @@ const PropertiesList = () => {
                         </div>
                       )}
 
-                      <div className="absolute left-2 top-2" onClick={(event) => event.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedIdSet.has(p.id)}
-                          onCheckedChange={(checked) => togglePropertySelection(p.id, checked)}
-                          aria-label={`Select ${p.title}`}
-                        />
-                      </div>
+                      {canManageProperties ? (
+                        <div className="absolute left-2 top-2" onClick={(event) => event.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIdSet.has(p.id)}
+                            onCheckedChange={(checked) => togglePropertySelection(p.id, checked)}
+                            aria-label={`Select ${p.title}`}
+                          />
+                        </div>
+                      ) : null}
 
                       <div className="absolute right-2 top-2 rounded-md border bg-background/90 px-2 py-1 font-mono text-[11px] font-semibold text-muted-foreground">
                         {getPropertyCode(p)}
@@ -1298,23 +1395,39 @@ const PropertiesList = () => {
                       ) : null}
 
                       <div className="flex items-center justify-end gap-1 pt-1" onClick={(event) => event.stopPropagation()}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            void handleShareProperty(p);
+                          }}
+                        >
+                          <Share2 className="mr-1 h-3.5 w-3.5" />
+                          Share
+                        </Button>
                         <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
                           <Link href={`/properties/${p.id}`}>View</Link>
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
-                          <Link href={`/properties/${p.id}/edit`}>Edit</Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs text-destructive hover:text-destructive"
-                          onClick={() => {
-                            openSingleDeleteDialog(p);
-                          }}
-                          disabled={deletingIdSet.has(p.id)}
-                        >
-                          {deletingIdSet.has(p.id) ? "Deleting..." : "Delete"}
-                        </Button>
+                        {canManageProperties ? (
+                          <>
+                            <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                              <Link href={`/properties/${p.id}/edit`}>Edit</Link>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive"
+                              onClick={() => {
+                                openSingleDeleteDialog(p);
+                              }}
+                              disabled={deletingIdSet.has(p.id)}
+                            >
+                              {deletingIdSet.has(p.id) ? "Deleting..." : "Delete"}
+                            </Button>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1605,34 +1718,83 @@ const PropertiesList = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog
-        open={deleteDialog.open}
-        onOpenChange={(open) => {
-          if (!open && !dialogIsDeleting) {
-            closeDeleteDialog();
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{deleteDialogTitle}</AlertDialogTitle>
-            <AlertDialogDescription>{deleteDialogDescription}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={dialogIsDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={dialogIsDeleting}
-              onClick={(event) => {
-                event.preventDefault();
-                void handleConfirmDeleteDialog();
-              }}
-            >
-              {deleteActionLabel}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {canManageProperties ? (
+        <AlertDialog
+          open={deleteDialog.open}
+          onOpenChange={(open) => {
+            if (!open && !dialogIsDeleting) {
+              closeDeleteDialog();
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{deleteDialogTitle}</AlertDialogTitle>
+              <AlertDialogDescription>{deleteDialogDescription}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={dialogIsDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={dialogIsDeleting}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleConfirmDeleteDialog();
+                }}
+              >
+                {deleteActionLabel}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
+
+      {showMobileActionBar ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 sm:hidden">
+          <div className="border-t border-border/70 bg-background/95 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/85">
+            <div className="mx-auto flex max-w-md items-center justify-around px-5 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-2">
+              <button
+                type="button"
+                onClick={openStoryFilePicker}
+                disabled={!canPublishStory || uploadingStory}
+                className="relative inline-flex h-11 w-11 items-center justify-center rounded-full transition hover:bg-muted/55 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label={uploadingStory ? "Uploading story" : "Add story"}
+              >
+                <span className="absolute inset-0 rounded-full bg-gradient-to-br from-fuchsia-500 via-rose-500 to-amber-400" />
+                <span className="relative inline-flex h-[37px] w-[37px] items-center justify-center rounded-full bg-background">
+                  <Plus className="h-5 w-5" />
+                </span>
+              </button>
+
+              {canManageProperties ? (
+                <Link
+                  href="/properties/new"
+                  className="relative -mt-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground text-background shadow-lg ring-4 ring-background/90 transition-transform hover:scale-[1.03] active:scale-[0.98]"
+                  aria-label="Add property"
+                >
+                  <Building2 className="h-6 w-6" />
+                </Link>
+              ) : (
+                <span
+                  className="relative -mt-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground ring-4 ring-background/90 opacity-60"
+                  aria-label="Add property unavailable"
+                >
+                  <Building2 className="h-6 w-6" />
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={scrollToMapSection}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full text-foreground transition hover:bg-muted/55"
+                aria-label="Go to map"
+              >
+                <MapIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

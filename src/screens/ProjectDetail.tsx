@@ -298,6 +298,10 @@ const ProjectDetail = () => {
   const assignedCompany = project.assigned_company_id
     ? users.find((item) => item.id === project.assigned_company_id && item.role === "company")
     : undefined;
+  const assignedViewer = project.assigned_viewer_id
+    ? users.find((item) => item.id === project.assigned_viewer_id && item.role === "viewer")
+    : undefined;
+  const canManageProject = user?.role !== "viewer";
   const relationItems = [
     firstNonEmpty(assignedCompany?.company_name, assignedCompany?.full_name)
       ? { label: "Company", value: firstNonEmpty(assignedCompany?.company_name, assignedCompany?.full_name) }
@@ -313,6 +317,12 @@ const ProjectDetail = () => {
       : null,
     firstNonEmpty(assignedCompany?.company_address)
       ? { label: "Address", value: firstNonEmpty(assignedCompany?.company_address) }
+      : null,
+    firstNonEmpty(assignedViewer?.full_name)
+      ? { label: "Viewer", value: firstNonEmpty(assignedViewer?.full_name) }
+      : null,
+    firstNonEmpty(project.assigned_viewer_id)
+      ? { label: "Viewer ID", value: firstNonEmpty(project.assigned_viewer_id) }
       : null,
   ].filter((item): item is { label: string; value: string } => item !== null);
 
@@ -403,9 +413,11 @@ const ProjectDetail = () => {
             <p className="font-semibold text-slate-800 truncate">{project.title}</p>
           </div>
 
-          <Button asChild className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium">
-            <Link href={`/projects/${project.id}/edit`}><Edit className="h-4 w-4" />Edit Project</Link>
-          </Button>
+          {canManageProject ? (
+            <Button asChild className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium">
+              <Link href={`/projects/${project.id}/edit`}><Edit className="h-4 w-4" />Edit Project</Link>
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -497,9 +509,11 @@ const ProjectDetail = () => {
               </>
             ) : null}
 
-            <Button asChild className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
-              <Link href={`/projects/${id}/edit`}><Edit className="h-4 w-4" />Edit Project</Link>
-            </Button>
+            {canManageProject ? (
+              <Button asChild className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
+                <Link href={`/projects/${id}/edit`}><Edit className="h-4 w-4" />Edit Project</Link>
+              </Button>
+            ) : null}
           </Card>
         </div>
 
@@ -596,7 +610,7 @@ const ProjectDetail = () => {
                 {showRelationsCard ? (
                   <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
                     <CardContent className="p-5">
-                      <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-2">Assigned Company</p>
+                      <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-2">Assignments</p>
                       {relationItems.map((item) => (
                         <div key={item.label} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
                           <span className="text-xs text-slate-400 uppercase">{item.label}</span>
@@ -725,9 +739,11 @@ const ProjectDetail = () => {
                             <Eye className="h-3.5 w-3.5" />
                             View
                           </Button>
-                          <Button asChild variant="outline" size="sm">
-                            <Link href={`/projects/${project.id}/edit`}>Manage</Link>
-                          </Button>
+                          {canManageProject ? (
+                            <Button asChild variant="outline" size="sm">
+                              <Link href={`/projects/${project.id}/edit`}>Manage</Link>
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -922,11 +938,13 @@ const ProjectDetail = () => {
                 ))}
               </div>
 
-              <div className="flex justify-end">
-                <Button asChild variant="outline" size="sm">
-                  <Link href={`/projects/${project.id}/edit`} onClick={closeUnitView}>Manage in Project Edit</Link>
-                </Button>
-              </div>
+              {canManageProject ? (
+                <div className="flex justify-end">
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/projects/${project.id}/edit`} onClick={closeUnitView}>Manage in Project Edit</Link>
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </DialogContent>

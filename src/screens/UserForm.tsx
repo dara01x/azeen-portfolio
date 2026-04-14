@@ -258,7 +258,11 @@ const UserForm = () => {
             <div className="space-y-2"><Label>Role</Label>
               <Select value={form.role} onValueChange={v => update("role", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="company">Company</SelectItem></SelectContent>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="company">Company</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label>Status</Label>

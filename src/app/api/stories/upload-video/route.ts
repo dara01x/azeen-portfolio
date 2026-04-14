@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getAdminStorageBucket } from "@/lib/firebase/admin";
-import { requireApiUser } from "@/modules/properties/property.api-auth";
+import { requireApiActor } from "@/modules/properties/property.api-auth";
 
 export const runtime = "nodejs";
 
@@ -87,7 +87,17 @@ function toFirebaseDownloadUrl(bucketName: string, objectPath: string, token: st
 
 export async function POST(request: Request) {
   try {
-    const actor = await requireApiUser(request);
+    const actor = await requireApiActor(request);
+
+    if (actor.role === "viewer") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Forbidden.",
+        },
+        { status: 403 },
+      );
+    }
 
     const formData = await request.formData();
     const fileValue = formData.get("file");

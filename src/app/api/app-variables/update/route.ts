@@ -1,11 +1,15 @@
-import { requireApiUser } from "@/modules/properties/property.api-auth";
+import { requireApiActor } from "@/modules/properties/property.api-auth";
 import { updateVariable } from "@/modules/app-variables/appVariables.service";
 
 export const runtime = "nodejs";
 
 export async function PUT(request: Request) {
   try {
-    await requireApiUser(request);
+    const actor = await requireApiActor(request);
+
+    if (actor.role === "viewer") {
+      return Response.json({ success: false, error: "Forbidden." }, { status: 403 });
+    }
 
     const body = await request.json().catch(() => ({}));
     const type = typeof body?.type === "string" ? body.type : "";
@@ -30,8 +34,12 @@ export async function PUT(request: Request) {
       variable,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
+    if (error instanceof Error && (error.message === "Unauthorized" || error.message === "Unauthorized.")) {
       return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (error instanceof Error && (error.message === "Forbidden" || error.message === "Forbidden.")) {
+      return Response.json({ success: false, error: "Forbidden." }, { status: 403 });
     }
 
     const message = error instanceof Error ? error.message : "Failed to update variable.";

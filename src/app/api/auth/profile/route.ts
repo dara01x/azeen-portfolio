@@ -4,7 +4,7 @@ import type { UserRole, UserStatus } from "@/lib/auth/types";
 export const runtime = "nodejs";
 
 function isValidRole(role: unknown): role is UserRole {
-  return role === "admin" || role === "company";
+  return role === "admin" || role === "company" || role === "viewer";
 }
 
 function normalizeRole(role: unknown): UserRole {

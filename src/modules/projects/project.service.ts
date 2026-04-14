@@ -18,7 +18,7 @@ type ProjectWriteInput = Partial<Project> & {
 };
 
 type ProjectAccessScope = {
-  role: "admin" | "company";
+  role: "admin" | "company" | "viewer";
   userId: string;
 };
 
@@ -30,6 +30,18 @@ function isCompanyScope(
   scope?: ProjectAccessScope,
 ): scope is ProjectAccessScope & { role: "company" } {
   return !!scope && scope.role === "company";
+}
+
+function isViewerScope(
+  scope?: ProjectAccessScope,
+): scope is ProjectAccessScope & { role: "viewer" } {
+  return !!scope && scope.role === "viewer";
+}
+
+function assertProjectWritePermission(scope?: ProjectAccessScope) {
+  if (isViewerScope(scope)) {
+    throw new Error("Forbidden.");
+  }
 }
 
 function redactProjectContactFields(record: ProjectRecord): ProjectRecord {
@@ -268,6 +280,7 @@ function normalizeProjectData(input: ProjectWriteInput) {
     main_image: sanitizedMainImage || images[0] || "",
     video_url: asString(input.video_url),
     assigned_company_id: asString(input.assigned_company_id),
+    assigned_viewer_id: asString(input.assigned_viewer_id),
     internal_notes: asString(input.internal_notes),
   };
 }
@@ -307,6 +320,7 @@ function mapDocToProjectRecord(id: string, data: Record<string, unknown>): Proje
     main_image: asString(data.main_image) || undefined,
     video_url: asString(data.video_url) || undefined,
     assigned_company_id: asString(data.assigned_company_id) || undefined,
+    assigned_viewer_id: asString(data.assigned_viewer_id) || undefined,
     internal_notes: asString(data.internal_notes) || undefined,
     coordinates: {
       lat: asNullableNumber(coordinates.lat ?? data.lat),
@@ -321,6 +335,8 @@ export async function createProject(
   data: ProjectWriteInput,
   scope?: ProjectAccessScope,
 ): Promise<ProjectRecord> {
+  assertProjectWritePermission(scope);
+
   const db = getAdminDb();
   const now = Timestamp.now();
   const normalized = normalizeProjectData(data);
@@ -348,7 +364,9 @@ export async function getProjects(scope?: ProjectAccessScope): Promise<ProjectRe
   const records = snapshot.docs.map((doc) => mapDocToProjectRecord(doc.id, doc.data()));
   const visibleRecords = isCompanyScope(scope)
     ? records.filter((record) => record.assigned_company_id === scope.userId)
-    : records;
+    : isViewerScope(scope)
+      ? records.filter((record) => record.assigned_viewer_id === scope.userId)
+      : records;
 
   return visibleRecords.map((record) => applyProjectReadScope(record, scope));
 }
@@ -358,6 +376,8 @@ export async function updateProject(
   data: ProjectWriteInput,
   scope?: ProjectAccessScope,
 ): Promise<ProjectRecord> {
+  assertProjectWritePermission(scope);
+
   const db = getAdminDb();
   const docRef = db.collection("projects").doc(id);
 
@@ -387,6 +407,8 @@ export async function updateProject(
 }
 
 export async function deleteProject(id: string, scope?: ProjectAccessScope): Promise<void> {
+  assertProjectWritePermission(scope);
+
   const db = getAdminDb();
   const docRef = db.collection("projects").doc(id);
 
@@ -405,6 +427,10 @@ export async function assertProjectWriteAccess(
   id: string,
   scope?: ProjectAccessScope,
 ): Promise<void> {
+  if (isViewerScope(scope)) {
+    throw new Error("Forbidden.");
+  }
+
   if (!isCompanyScope(scope)) {
     return;
   }

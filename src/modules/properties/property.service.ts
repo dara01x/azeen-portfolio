@@ -40,7 +40,7 @@ type PropertyWriteInput = Partial<Property> & {
 };
 
 type PropertyAccessScope = {
-  role: "admin" | "company";
+  role: "admin" | "company" | "viewer";
   userId: string;
 };
 
@@ -101,6 +101,18 @@ function isCompanyScope(
   return !!scope && scope.role === "company";
 }
 
+function isViewerScope(
+  scope?: PropertyAccessScope,
+): scope is PropertyAccessScope & { role: "viewer" } {
+  return !!scope && scope.role === "viewer";
+}
+
+function assertPropertyWritePermission(scope?: PropertyAccessScope) {
+  if (isViewerScope(scope)) {
+    throw new Error("Forbidden.");
+  }
+}
+
 function redactPropertyContactFields(record: PropertyRecord): PropertyRecord {
   return {
     ...record,
@@ -155,6 +167,55 @@ function asStringArray(value: unknown): string[] {
 
 function asUniqueStrings(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+async function resolveUserDisplayNames(userIds: string[]) {
+  const uniqueUserIds = asUniqueStrings(userIds);
+  if (uniqueUserIds.length === 0) {
+    return new Map<string, string>();
+  }
+
+  const db = getAdminDb();
+  const snapshots = await Promise.all(
+    uniqueUserIds.map((userId) => db.collection("users").doc(userId).get()),
+  );
+
+  const namesByUserId = new Map<string, string>();
+
+  snapshots.forEach((snapshot, index) => {
+    if (!snapshot.exists) {
+      return;
+    }
+
+    const data = (snapshot.data() || {}) as Record<string, unknown>;
+    const companyName = asString(data.company_name).trim();
+    const fullName = asString(data.full_name).trim();
+    const displayName = companyName || fullName;
+
+    if (displayName) {
+      namesByUserId.set(uniqueUserIds[index], displayName);
+    }
+  });
+
+  return namesByUserId;
+}
+
+function withPropertyAssignmentNames(
+  record: PropertyRecord,
+  namesByUserId: Map<string, string>,
+): PropertyRecord {
+  const assignedCompanyId = asString(record.assigned_company_id).trim();
+  const assignedViewerId = asString(record.assigned_viewer_id).trim();
+
+  return {
+    ...record,
+    assigned_company_name: assignedCompanyId
+      ? namesByUserId.get(assignedCompanyId) || undefined
+      : undefined,
+    assigned_viewer_name: assignedViewerId
+      ? namesByUserId.get(assignedViewerId) || undefined
+      : undefined,
+  };
 }
 
 function asDateString(value: unknown) {
@@ -370,6 +431,7 @@ function normalizePropertyData(input: PropertyWriteInput) {
     project_id: asString(input.project_id),
     owner_client_id: asString(input.owner_client_id),
     assigned_company_id: asString(input.assigned_company_id),
+    assigned_viewer_id: asString(input.assigned_viewer_id),
     contact_name: asString(input.contact_name),
     primary_mobile_number: asString(input.primary_mobile_number),
     secondary_mobile_number: asString(input.secondary_mobile_number),
@@ -440,6 +502,9 @@ function mapDocToPropertyRecord(id: string, data: Record<string, unknown>): Prop
     project_id: asString(data.project_id) || undefined,
     owner_client_id: asString(data.owner_client_id) || undefined,
     assigned_company_id: asString(data.assigned_company_id) || undefined,
+    assigned_company_name: asString(data.assigned_company_name) || undefined,
+    assigned_viewer_id: asString(data.assigned_viewer_id) || undefined,
+    assigned_viewer_name: asString(data.assigned_viewer_name) || undefined,
     contact_name: asString(data.contact_name),
     primary_mobile_number: asString(data.primary_mobile_number),
     secondary_mobile_number: asString(data.secondary_mobile_number) || undefined,
@@ -468,6 +533,8 @@ export async function createProperty(
   data: PropertyWriteInput,
   scope?: PropertyAccessScope,
 ): Promise<PropertyRecord> {
+  assertPropertyWritePermission(scope);
+
   const db = getAdminDb();
   const now = Timestamp.now();
   const normalized = normalizePropertyData(data);
@@ -500,9 +567,18 @@ export async function getProperties(scope?: PropertyAccessScope): Promise<Proper
   const records = snapshot.docs.map((doc) => mapDocToPropertyRecord(doc.id, doc.data()));
   const visibleRecords = isCompanyScope(scope)
     ? records.filter((record) => record.assigned_company_id === scope.userId)
-    : records;
+    : isViewerScope(scope)
+      ? records.filter((record) => record.assigned_viewer_id === scope.userId)
+      : records;
 
-  return visibleRecords.map((record) => applyPropertyReadScope(record, scope));
+  const assignmentUserIds = asUniqueStrings(
+    visibleRecords.flatMap((record) => [record.assigned_company_id || "", record.assigned_viewer_id || ""]),
+  );
+  const namesByUserId = await resolveUserDisplayNames(assignmentUserIds);
+
+  return visibleRecords.map((record) =>
+    applyPropertyReadScope(withPropertyAssignmentNames(record, namesByUserId), scope),
+  );
 }
 
 export async function updateProperty(
@@ -510,6 +586,8 @@ export async function updateProperty(
   data: PropertyWriteInput,
   scope?: PropertyAccessScope,
 ): Promise<PropertyRecord> {
+  assertPropertyWritePermission(scope);
+
   const db = getAdminDb();
   const docRef = db.collection("properties").doc(id);
 
@@ -542,6 +620,8 @@ export async function updateProperty(
 }
 
 export async function deleteProperty(id: string, scope?: PropertyAccessScope): Promise<void> {
+  assertPropertyWritePermission(scope);
+
   const db = getAdminDb();
   const docRef = db.collection("properties").doc(id);
 
@@ -560,6 +640,10 @@ export async function assertPropertyWriteAccess(
   id: string,
   scope?: PropertyAccessScope,
 ): Promise<void> {
+  if (isViewerScope(scope)) {
+    throw new Error("Forbidden.");
+  }
+
   if (!isCompanyScope(scope)) {
     return;
   }

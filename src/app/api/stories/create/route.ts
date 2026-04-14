@@ -1,12 +1,22 @@
 import { NextResponse } from "next/server";
-import { requireApiUser } from "@/modules/properties/property.api-auth";
+import { requireApiActor } from "@/modules/properties/property.api-auth";
 import { createStory } from "@/modules/stories/story.service";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const actor = await requireApiUser(request);
+    const actor = await requireApiActor(request);
+
+    if (actor.role === "viewer") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Forbidden.",
+        },
+        { status: 403 },
+      );
+    }
 
     const body = await request.json().catch(() => ({}));
     const payload = body?.data ?? body;

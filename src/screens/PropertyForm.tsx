@@ -247,6 +247,7 @@ const PropertyForm = () => {
   const [cities, setCities] = useState<City[]>([]);
   const [areas, setAreas] = useState<City[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
+  const [viewers, setViewers] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
   const [localVideoFile, setLocalVideoFile] = useState<File | null>(null);
   const [localVideoPreviewUrl, setLocalVideoPreviewUrl] = useState("");
@@ -382,8 +383,13 @@ const PropertyForm = () => {
     fetchUsers()
       .then((items) => {
         if (!cancelled) {
+          const activeUsers = (items as User[]).filter((item) => item.status === "active");
+
           setCompanies(
-            (items as User[]).filter((item) => item.role === "company" && item.status === "active"),
+            activeUsers.filter((item) => item.role === "company"),
+          );
+          setViewers(
+            activeUsers.filter((item) => item.role === "viewer"),
           );
         }
       })
@@ -392,6 +398,7 @@ const PropertyForm = () => {
           const message = fetchError instanceof Error ? fetchError.message : "Failed to load users.";
           setLookupError((prev) => prev || message);
           setCompanies([]);
+          setViewers([]);
         }
       });
 
@@ -514,6 +521,7 @@ const PropertyForm = () => {
         address_en: singleAddressValue,
         address_ku: singleAddressValue,
         address_ar: singleAddressValue,
+        assigned_viewer_id: (form.assigned_viewer_id || "").trim() || undefined,
         contact_name: form.contact_name.trim(),
         primary_mobile_number: normalizedPrimaryMobileNumber,
         internal_notes: (form.internal_notes || "").trim(),
@@ -654,6 +662,20 @@ const PropertyForm = () => {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (!authLoading && user?.role === "viewer") {
+    return (
+      <div className="space-y-3">
+        <h1 className="text-2xl font-bold tracking-tight">View Only Access</h1>
+        <p className="text-sm text-muted-foreground">
+          Viewer accounts can only view assigned properties.
+        </p>
+        <Button asChild>
+          <Link href="/properties">Go to Properties</Link>
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -915,7 +937,7 @@ const PropertyForm = () => {
           </div>
         </FormSection>
 
-        <FormSection title="Contact Information" description="Owner, agent, and company assignment">
+        <FormSection title="Contact Information" description="Owner, agent, and assignment details">
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Assigned Company (Optional)</Label>
@@ -934,6 +956,29 @@ const PropertyForm = () => {
                   {companies.map((company) => (
                     <SelectItem key={company.id} value={company.id}>
                       {company.company_name || company.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Assigned Viewer (Optional)</Label>
+              <Select
+                value={form.assigned_viewer_id || OPTIONAL_LINK_NONE}
+                onValueChange={(value) =>
+                  update("assigned_viewer_id", value === OPTIONAL_LINK_NONE ? undefined : value)
+                }
+              >
+                <SelectTrigger><SelectValue placeholder="Select viewer" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={OPTIONAL_LINK_NONE}>None</SelectItem>
+                  {!hasOptionById(viewers, form.assigned_viewer_id) && form.assigned_viewer_id ? (
+                    <SelectItem value={form.assigned_viewer_id}>Current: {form.assigned_viewer_id}</SelectItem>
+                  ) : null}
+                  {viewers.map((viewer) => (
+                    <SelectItem key={viewer.id} value={viewer.id}>
+                      {viewer.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>

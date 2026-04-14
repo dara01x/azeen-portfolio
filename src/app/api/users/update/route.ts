@@ -49,11 +49,11 @@ export async function PUT(request: Request) {
       );
     }
 
-    if (isSelfTarget && nextRole === "company") {
+    if (isSelfTarget && (nextRole === "company" || nextRole === "viewer")) {
       return NextResponse.json(
         {
           success: false,
-          error: "You cannot change your own role to company.",
+          error: "You cannot change your own role to company or viewer.",
         },
         { status: 400 },
       );

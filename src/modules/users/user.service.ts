@@ -18,7 +18,7 @@ function asString(value: unknown, fallback = "") {
 }
 
 function normalizeRole(value: unknown): User["role"] {
-  if (value === "company" || value === "admin") {
+  if (value === "company" || value === "admin" || value === "viewer") {
     return value;
   }
 
@@ -464,5 +464,5 @@ export async function canManageUsers(uid: string): Promise<boolean> {
   const actorRole = normalizeRole(actorData.role);
   const actorStatus = normalizeStatus(actorData.status);
 
-  return actorStatus === "active" && actorRole !== "company";
+  return actorStatus === "active" && actorRole === "admin";
 }

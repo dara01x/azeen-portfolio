@@ -105,7 +105,7 @@ const PropertyDetail = () => {
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [cities, setCities] = useState<AppVariableItem[]>([]);
-  const [companies, setCompanies] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
 
   useEffect(() => {
     if (authLoading || !user || !id) {
@@ -177,19 +177,24 @@ const PropertyDetail = () => {
       return;
     }
 
+    if (user.role === "viewer") {
+      setUsers([]);
+      return;
+    }
+
     let cancelled = false;
 
     fetchUsers()
       .then((items) => {
         if (!cancelled) {
-          setCompanies((items as User[]).filter((item) => item.role === "company"));
+          setUsers(items as User[]);
         }
       })
       .catch((fetchError) => {
         if (!cancelled) {
           const message = fetchError instanceof Error ? fetchError.message : "Failed to load companies.";
           setLookupError((prev) => prev || message);
-          setCompanies([]);
+          setUsers([]);
         }
       });
 
@@ -235,16 +240,37 @@ const PropertyDetail = () => {
   const typeName = findVariableName(propertyTypes, property.type_id);
   const cityName = findVariableName(cities, property.city_id);
   const assignedCompanyName = (() => {
+    if (property.assigned_company_name?.trim()) {
+      return property.assigned_company_name;
+    }
+
     if (!property.assigned_company_id) {
       return "—";
     }
 
-    const assignedCompany = companies.find((item) => item.id === property.assigned_company_id);
+    const assignedCompany = users.find(
+      (item) => item.id === property.assigned_company_id && item.role === "company",
+    );
     if (!assignedCompany) {
       return "—";
     }
 
     return assignedCompany.company_name || assignedCompany.full_name || "—";
+  })();
+  const assignedViewerName = (() => {
+    if (property.assigned_viewer_name?.trim()) {
+      return property.assigned_viewer_name;
+    }
+
+    if (!property.assigned_viewer_id) {
+      return "—";
+    }
+
+    const assignedViewer = users.find(
+      (item) => item.id === property.assigned_viewer_id && item.role === "viewer",
+    );
+
+    return assignedViewer?.full_name || property.assigned_viewer_id;
   })();
   const images = property.images.length > 0 ? property.images : property.main_image ? [property.main_image] : [];
   const safeImageIndex = images.length > 0 && activeImageIndex < images.length ? activeImageIndex : 0;
@@ -258,6 +284,7 @@ const PropertyDetail = () => {
       ? { lat: property.lat, lng: property.lng }
       : null;
   const canViewAgentContact = user?.role === "admin";
+  const canManageProperty = user?.role !== "viewer";
   const propertyDateLabel = formatPropertyDate(property.listing_date || property.created_at || null);
 
   const showImageControls = images.length > 1;
@@ -293,9 +320,11 @@ const PropertyDetail = () => {
             <p className="font-semibold text-slate-800 truncate">{typeName}</p>
           </div>
 
-          <Button asChild className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium">
-            <Link href={`/properties/${id}/edit`}><Edit className="h-4 w-4" />Edit Property</Link>
-          </Button>
+          {canManageProperty ? (
+            <Button asChild className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium">
+              <Link href={`/properties/${id}/edit`}><Edit className="h-4 w-4" />Edit Property</Link>
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -416,9 +445,11 @@ const PropertyDetail = () => {
               </>
             ) : null}
 
-            <Button asChild className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
-              <Link href={`/properties/${id}/edit`}><Edit className="h-4 w-4" />Edit Property</Link>
-            </Button>
+            {canManageProperty ? (
+              <Button asChild className="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
+                <Link href={`/properties/${id}/edit`}><Edit className="h-4 w-4" />Edit Property</Link>
+              </Button>
+            ) : null}
           </Card>
         </div>
 
@@ -578,6 +609,7 @@ const PropertyDetail = () => {
                 <p className="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-3 mb-4">Assignment</p>
                 <div className="grid grid-cols-1 gap-4">
                   <Field label="Assigned Company" value={assignedCompanyName} />
+                  <Field label="Assigned Viewer" value={assignedViewerName} />
                 </div>
               </CardContent>
             </Card>

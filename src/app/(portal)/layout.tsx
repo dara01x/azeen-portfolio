@@ -5,6 +5,28 @@ import { usePathname, useRouter } from "next/navigation";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth/useAuth";
 
+function isViewerAllowedPath(pathname: string | null) {
+  if (!pathname) {
+    return false;
+  }
+
+  if (pathname === "/" || pathname === "/properties" || pathname === "/projects") {
+    return true;
+  }
+
+  const propertyDetailMatch = pathname.match(/^\/properties\/([^/]+)$/);
+  if (propertyDetailMatch) {
+    return propertyDetailMatch[1] !== "new";
+  }
+
+  const projectDetailMatch = pathname.match(/^\/projects\/([^/]+)$/);
+  if (projectDetailMatch) {
+    return projectDetailMatch[1] !== "new";
+  }
+
+  return false;
+}
+
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -23,6 +45,11 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
     if (user.role === "company" && pathname?.startsWith("/users")) {
       router.replace("/");
+      return;
+    }
+
+    if (user.role === "viewer" && !isViewerAllowedPath(pathname)) {
+      router.replace("/properties");
     }
   }, [loading, pathname, router, user]);
 
@@ -35,6 +62,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   }
 
   if (user.role === "company" && pathname?.startsWith("/users")) {
+    return null;
+  }
+
+  if (user.role === "viewer" && !isViewerAllowedPath(pathname)) {
     return null;
   }
 

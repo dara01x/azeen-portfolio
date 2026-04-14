@@ -90,6 +90,7 @@ const ProjectsList = () => {
 
   const hasActiveFilters =
     cityFilter !== "all" || areaFilter !== "all";
+  const canManageProjects = !!user && user.role !== "viewer";
 
   const resetFilters = () => {
     setCityFilter("all");
@@ -416,6 +417,10 @@ const ProjectsList = () => {
   }
 
   const openSingleDeleteDialog = (project: Project) => {
+    if (!canManageProjects) {
+      return;
+    }
+
     if (deletingIdSet.has(project.id)) {
       return;
     }
@@ -424,6 +429,10 @@ const ProjectsList = () => {
   };
 
   const openSelectedDeleteDialog = () => {
+    if (!canManageProjects) {
+      return;
+    }
+
     if (selectedProjectIds.length === 0) {
       return;
     }
@@ -446,9 +455,11 @@ const ProjectsList = () => {
         title="Projects"
         description="Manage your development projects"
         actions={
-          <Button asChild>
-            <Link href="/projects/new"><Plus className="mr-2 h-4 w-4" />Add Project</Link>
-          </Button>
+          canManageProjects ? (
+            <Button asChild>
+              <Link href="/projects/new"><Plus className="mr-2 h-4 w-4" />Add Project</Link>
+            </Button>
+          ) : undefined
         }
       />
 
@@ -525,7 +536,7 @@ const ProjectsList = () => {
           </Popover>
         </div>
 
-        {selectedProjectIds.length > 0 ? (
+        {canManageProjects && selectedProjectIds.length > 0 ? (
           <div className="px-3 pt-2">
             <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
               <p className="text-xs text-muted-foreground">{selectedProjectIds.length} selected</p>
@@ -561,9 +572,11 @@ const ProjectsList = () => {
               title="Unable to load projects"
               description={error}
               action={
-                <Button asChild>
-                  <Link href="/projects/new"><Plus className="mr-2 h-4 w-4" />Add Project</Link>
-                </Button>
+                canManageProjects ? (
+                  <Button asChild>
+                    <Link href="/projects/new"><Plus className="mr-2 h-4 w-4" />Add Project</Link>
+                  </Button>
+                ) : undefined
               }
             />
           </div>
@@ -573,23 +586,27 @@ const ProjectsList = () => {
               title="No projects found"
               description="Try adjusting filters or add a new project."
               action={
-                <Button asChild>
-                  <Link href="/projects/new"><Plus className="mr-2 h-4 w-4" />Add Project</Link>
-                </Button>
+                canManageProjects ? (
+                  <Button asChild>
+                    <Link href="/projects/new"><Plus className="mr-2 h-4 w-4" />Add Project</Link>
+                  </Button>
+                ) : undefined
               }
             />
           </div>
         ) : (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
-                  onCheckedChange={toggleSelectAllVisible}
-                  aria-label="Select all projects on current page"
-                />
-                <span className="text-xs text-muted-foreground">Select all on this page</span>
-              </div>
+              {canManageProjects ? (
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAllVisible}
+                    aria-label="Select all projects on current page"
+                  />
+                  <span className="text-xs text-muted-foreground">Select all on this page</span>
+                </div>
+              ) : <div />}
               <p className="text-xs text-muted-foreground">{paginatedProjects.length} cards on this page</p>
             </div>
 
@@ -617,13 +634,15 @@ const ProjectsList = () => {
                         </div>
                       )}
 
-                      <div className="absolute left-2 top-2" onClick={(event) => event.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedIdSet.has(project.id)}
-                          onCheckedChange={(checked) => toggleProjectSelection(project.id, checked)}
-                          aria-label={`Select ${project.title}`}
-                        />
-                      </div>
+                      {canManageProjects ? (
+                        <div className="absolute left-2 top-2" onClick={(event) => event.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedIdSet.has(project.id)}
+                            onCheckedChange={(checked) => toggleProjectSelection(project.id, checked)}
+                            aria-label={`Select ${project.title}`}
+                          />
+                        </div>
+                      ) : null}
 
                       <div className="absolute right-2 top-2 rounded-md border bg-background/90 px-2 py-1 font-mono text-[11px] font-semibold text-muted-foreground">
                         {getProjectCode(project)}
@@ -648,20 +667,24 @@ const ProjectsList = () => {
                         <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
                           <Link href={`/projects/${project.id}`}>View</Link>
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
-                          <Link href={`/projects/${project.id}/edit`}>Edit</Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs text-destructive hover:text-destructive"
-                          onClick={() => {
-                            openSingleDeleteDialog(project);
-                          }}
-                          disabled={deletingIdSet.has(project.id)}
-                        >
-                          {deletingIdSet.has(project.id) ? "Deleting..." : "Delete"}
-                        </Button>
+                        {canManageProjects ? (
+                          <>
+                            <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                              <Link href={`/projects/${project.id}/edit`}>Edit</Link>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive"
+                              onClick={() => {
+                                openSingleDeleteDialog(project);
+                              }}
+                              disabled={deletingIdSet.has(project.id)}
+                            >
+                              {deletingIdSet.has(project.id) ? "Deleting..." : "Delete"}
+                            </Button>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -704,34 +727,36 @@ const ProjectsList = () => {
         )}
       </Card>
 
-      <AlertDialog
-        open={deleteDialog.open}
-        onOpenChange={(open) => {
-          if (!open && !dialogIsDeleting) {
-            closeDeleteDialog();
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{deleteDialogTitle}</AlertDialogTitle>
-            <AlertDialogDescription>{deleteDialogDescription}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={dialogIsDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={dialogIsDeleting}
-              onClick={(event) => {
-                event.preventDefault();
-                void handleConfirmDeleteDialog();
-              }}
-            >
-              {deleteActionLabel}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {canManageProjects ? (
+        <AlertDialog
+          open={deleteDialog.open}
+          onOpenChange={(open) => {
+            if (!open && !dialogIsDeleting) {
+              closeDeleteDialog();
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{deleteDialogTitle}</AlertDialogTitle>
+              <AlertDialogDescription>{deleteDialogDescription}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={dialogIsDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={dialogIsDeleting}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleConfirmDeleteDialog();
+                }}
+              >
+                {deleteActionLabel}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
     </div>
   );
 };

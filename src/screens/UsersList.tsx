@@ -26,6 +26,7 @@ import type { User } from "@/types";
 const roleColors: Record<User["role"], string> = {
   admin: "bg-blue-100 text-blue-700 border-blue-200",
   company: "bg-amber-100 text-amber-700 border-amber-200",
+  viewer: "bg-emerald-100 text-emerald-700 border-emerald-200",
 };
 
 const UsersList = () => {
@@ -150,6 +151,7 @@ const UsersList = () => {
               <SelectItem value="all">All Roles</SelectItem>
               <SelectItem value="admin">Admin</SelectItem>
               <SelectItem value="company">Company</SelectItem>
+              <SelectItem value="viewer">Viewer</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>

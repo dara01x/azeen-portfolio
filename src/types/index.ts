@@ -35,7 +35,7 @@ export interface User {
   id: string;
   full_name: string;
   email: string;
-  role: "admin" | "company";
+  role: "admin" | "company" | "viewer";
   status: "active" | "disabled";
   phone: string;
   company_name?: string;
@@ -100,6 +100,9 @@ export interface Property {
   project_id?: string;
   owner_client_id?: string;
   assigned_company_id?: string;
+  assigned_company_name?: string;
+  assigned_viewer_id?: string;
+  assigned_viewer_name?: string;
   contact_name: string;
   primary_mobile_number: string;
   secondary_mobile_number?: string;
@@ -136,6 +139,7 @@ export interface Project {
   main_image?: string;
   video_url?: string;
   assigned_company_id?: string;
+  assigned_viewer_id?: string;
   internal_notes?: string;
 }
 

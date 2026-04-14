@@ -14,7 +14,7 @@ type UnitRecord = Unit & {
 type UnitWriteInput = Partial<Unit>;
 
 type UnitAccessScope = {
-  role: "admin" | "company";
+  role: "admin" | "company" | "viewer";
   userId: string;
 };
 
@@ -65,6 +65,16 @@ function toIso(value: unknown): string | null {
 
 function isCompanyScope(scope?: UnitAccessScope): scope is UnitAccessScope & { role: "company" } {
   return !!scope && scope.role === "company";
+}
+
+function isViewerScope(scope?: UnitAccessScope): scope is UnitAccessScope & { role: "viewer" } {
+  return !!scope && scope.role === "viewer";
+}
+
+function assertUnitWritePermission(scope?: UnitAccessScope) {
+  if (isViewerScope(scope)) {
+    throw new Error("Forbidden.");
+  }
 }
 
 function normalizeUnitStatus(value: unknown): Unit["status"] {
@@ -401,6 +411,16 @@ async function getProjectAssignedCompanyId(projectId: string) {
   return asString(data.assigned_company_id).trim();
 }
 
+async function getViewerAssignedProjectIds(viewerUserId: string) {
+  const db = getAdminDb();
+  const snapshot = await db
+    .collection("projects")
+    .where("assigned_viewer_id", "==", viewerUserId)
+    .get();
+
+  return new Set(snapshot.docs.map((doc) => doc.id));
+}
+
 async function assertUniqueUnitNumber(projectId: string, unitNumber: string, excludeId?: string) {
   if (!unitNumber.trim()) {
     return;
@@ -539,6 +559,8 @@ function mapDocToUnitRecord(id: string, data: Record<string, unknown>): UnitReco
 }
 
 export async function createUnit(data: UnitWriteInput, scope?: UnitAccessScope): Promise<UnitRecord> {
+  assertUnitWritePermission(scope);
+
   const db = getAdminDb();
   const now = Timestamp.now();
   const normalized = normalizeUnitData(data);
@@ -571,11 +593,21 @@ export async function getUnits(scope?: UnitAccessScope): Promise<UnitRecord[]> {
   const snapshot = await db.collection("units").orderBy("updated_at", "desc").get();
   const records = snapshot.docs.map((doc) => mapDocToUnitRecord(doc.id, doc.data()));
 
-  if (!isCompanyScope(scope)) {
-    return records;
+  if (isCompanyScope(scope)) {
+    return records.filter((record) => record.assigned_company_id === scope.userId);
   }
 
-  return records.filter((record) => record.assigned_company_id === scope.userId);
+  if (isViewerScope(scope)) {
+    const assignedProjectIds = await getViewerAssignedProjectIds(scope.userId);
+
+    if (assignedProjectIds.size === 0) {
+      return [];
+    }
+
+    return records.filter((record) => assignedProjectIds.has(record.project_id));
+  }
+
+  return records;
 }
 
 export async function updateUnit(
@@ -583,6 +615,8 @@ export async function updateUnit(
   data: UnitWriteInput,
   scope?: UnitAccessScope,
 ): Promise<UnitRecord> {
+  assertUnitWritePermission(scope);
+
   const db = getAdminDb();
   const docRef = db.collection("units").doc(id);
 
@@ -629,6 +663,8 @@ export async function updateUnit(
 }
 
 export async function deleteUnit(id: string, scope?: UnitAccessScope): Promise<void> {
+  assertUnitWritePermission(scope);
+
   const db = getAdminDb();
   const docRef = db.collection("units").doc(id);
 
@@ -645,6 +681,10 @@ export async function deleteUnit(id: string, scope?: UnitAccessScope): Promise<v
 }
 
 export async function assertUnitWriteAccess(id: string, scope?: UnitAccessScope): Promise<void> {
+  if (isViewerScope(scope)) {
+    throw new Error("Forbidden.");
+  }
+
   if (!isCompanyScope(scope)) {
     return;
   }

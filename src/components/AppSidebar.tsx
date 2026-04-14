@@ -26,7 +26,13 @@ export function AppSidebar() {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const { user } = useAuth();
   const collapsed = state === "collapsed";
-  const visibleMainNav = user?.role === "company" ? mainNav.filter((item) => item.url !== "/users") : mainNav;
+  const isViewer = user?.role === "viewer";
+  const visibleMainNav = isViewer
+    ? mainNav.filter((item) => item.url === "/properties" || item.url === "/projects")
+    : user?.role === "company"
+      ? mainNav.filter((item) => item.url !== "/users")
+      : mainNav;
+  const visibleSystemNav = isViewer ? [] : systemNav;
   const navLinkSpacingClass = isMobile ? "mx-2 px-3.5 py-2.5" : "mx-2 px-3 py-2";
   const navIconClass = isMobile ? "h-[18px] w-[18px] shrink-0" : "h-4 w-4 shrink-0";
   const navTextClass = isMobile ? "text-[15px]" : "text-sm";
@@ -82,27 +88,29 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel className={`${isMobile ? "text-xs" : "text-[11px]"} uppercase tracking-wider font-semibold text-muted-foreground/70 px-4`}>System</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {systemNav.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild size={isMobile ? "lg" : "default"} onClick={handleNavItemClick}>
-                    <NavLink
-                      to={item.url}
-                      className={`rounded-lg ${navLinkSpacingClass} text-muted-foreground hover:text-foreground hover:bg-accent transition-colors`}
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    >
-                      <item.icon className={navIconClass} />
-                      {!collapsed && <span className={navTextClass}>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {visibleSystemNav.length > 0 ? (
+          <SidebarGroup>
+            <SidebarGroupLabel className={`${isMobile ? "text-xs" : "text-[11px]"} uppercase tracking-wider font-semibold text-muted-foreground/70 px-4`}>System</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {visibleSystemNav.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild size={isMobile ? "lg" : "default"} onClick={handleNavItemClick}>
+                      <NavLink
+                        to={item.url}
+                        className={`rounded-lg ${navLinkSpacingClass} text-muted-foreground hover:text-foreground hover:bg-accent transition-colors`}
+                        activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      >
+                        <item.icon className={navIconClass} />
+                        {!collapsed && <span className={navTextClass}>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
       </SidebarContent>
     </Sidebar>
   );

@@ -1,7 +1,7 @@
 import type { DecodedIdToken } from "firebase-admin/auth";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 
-type ApiActorRole = "admin" | "company";
+type ApiActorRole = "admin" | "company" | "viewer";
 type ApiActorStatus = "active" | "disabled";
 
 export type ApiActor = {
@@ -17,7 +17,7 @@ function asString(value: unknown, fallback = "") {
 }
 
 function normalizeRole(value: unknown): ApiActorRole {
-  if (value === "company" || value === "admin") {
+  if (value === "company" || value === "admin" || value === "viewer") {
     return value;
   }
 

@@ -8,7 +8,7 @@ type StoryMediaType = "video" | "image";
 
 type StoryDeleteScope = {
   uid: string;
-  role: "admin" | "company";
+  role: "admin" | "company" | "viewer";
 };
 
 type StoryActor = {

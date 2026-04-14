@@ -287,6 +287,7 @@ const ProjectForm = () => {
   const [areas, setAreas] = useState<AppVariableItem[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
+  const [viewers, setViewers] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
   const [localVideoFile, setLocalVideoFile] = useState<File | null>(null);
   const [localVideoPreviewUrl, setLocalVideoPreviewUrl] = useState("");
@@ -435,8 +436,13 @@ const ProjectForm = () => {
     fetchUsers()
       .then((items) => {
         if (!cancelled) {
+          const activeUsers = (items as User[]).filter((item) => item.status === "active");
+
           setCompanies(
-            (items as User[]).filter((item) => item.role === "company" && item.status === "active"),
+            activeUsers.filter((item) => item.role === "company"),
+          );
+          setViewers(
+            activeUsers.filter((item) => item.role === "viewer"),
           );
         }
       })
@@ -445,6 +451,7 @@ const ProjectForm = () => {
           const message = fetchError instanceof Error ? fetchError.message : "Failed to load users.";
           setLookupError((prev) => prev || message);
           setCompanies([]);
+          setViewers([]);
         }
       });
 
@@ -901,6 +908,7 @@ const ProjectForm = () => {
         starting_price: Number(form.starting_price) || 0,
         video_url: form.video_url?.trim() || undefined,
         assigned_company_id: form.assigned_company_id || undefined,
+        assigned_viewer_id: (form.assigned_viewer_id || "").trim() || undefined,
         internal_notes: (form.internal_notes || "").trim(),
       };
 
@@ -1003,6 +1011,20 @@ const ProjectForm = () => {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (!authLoading && user?.role === "viewer") {
+    return (
+      <div className="space-y-3">
+        <h1 className="text-2xl font-bold tracking-tight">View Only Access</h1>
+        <p className="text-sm text-muted-foreground">
+          Viewer accounts can only view assigned projects.
+        </p>
+        <Button asChild>
+          <Link href="/projects">Go to Projects</Link>
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -1218,27 +1240,52 @@ const ProjectForm = () => {
           </FormSection>
 
           <FormSection title="Assignment">
-            <div className="space-y-2 sm:w-1/2">
-              <Label>Assigned Company (Optional)</Label>
-              <Select
-                value={form.assigned_company_id || OPTIONAL_LINK_NONE}
-                onValueChange={(value) =>
-                  update("assigned_company_id", value === OPTIONAL_LINK_NONE ? undefined : value)
-                }
-              >
-                <SelectTrigger><SelectValue placeholder="Select company (optional)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={OPTIONAL_LINK_NONE}>Unassigned</SelectItem>
-                  {!hasOptionById(companies, form.assigned_company_id) && form.assigned_company_id ? (
-                    <SelectItem value={form.assigned_company_id}>Current assigned company</SelectItem>
-                  ) : null}
-                  {companies.map((company) => (
-                    <SelectItem key={company.id} value={company.id}>
-                      {company.company_name || company.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Assigned Company (Optional)</Label>
+                <Select
+                  value={form.assigned_company_id || OPTIONAL_LINK_NONE}
+                  onValueChange={(value) =>
+                    update("assigned_company_id", value === OPTIONAL_LINK_NONE ? undefined : value)
+                  }
+                >
+                  <SelectTrigger><SelectValue placeholder="Select company (optional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={OPTIONAL_LINK_NONE}>Unassigned</SelectItem>
+                    {!hasOptionById(companies, form.assigned_company_id) && form.assigned_company_id ? (
+                      <SelectItem value={form.assigned_company_id}>Current assigned company</SelectItem>
+                    ) : null}
+                    {companies.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        {company.company_name || company.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Assigned Viewer (Optional)</Label>
+                <Select
+                  value={form.assigned_viewer_id || OPTIONAL_LINK_NONE}
+                  onValueChange={(value) =>
+                    update("assigned_viewer_id", value === OPTIONAL_LINK_NONE ? undefined : value)
+                  }
+                >
+                  <SelectTrigger><SelectValue placeholder="Select viewer (optional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={OPTIONAL_LINK_NONE}>Unassigned</SelectItem>
+                    {!hasOptionById(viewers, form.assigned_viewer_id) && form.assigned_viewer_id ? (
+                      <SelectItem value={form.assigned_viewer_id}>Current assigned viewer</SelectItem>
+                    ) : null}
+                    {viewers.map((viewer) => (
+                      <SelectItem key={viewer.id} value={viewer.id}>
+                        {viewer.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </FormSection>
 
