@@ -43,6 +43,7 @@ const PROPERTIES_PAGE_SIZE = 10;
 const MAX_STORY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024;
 const MAX_STORY_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const IMAGE_STORY_DURATION_MS = 6000;
+const PROPERTY_NOTES_PREVIEW_LENGTH = 140;
 
 type StoryGroup = {
   created_by_uid: string;
@@ -133,6 +134,14 @@ function resolveStoryMedia(story: Story): { type: "video" | "image"; url: string
   return null;
 }
 
+function normalizePropertyNotes(value?: string) {
+  if (!value) {
+    return "";
+  }
+
+  return value.trim().replace(/\s+/g, " ");
+}
+
 function normalizeAreaBoundaryPoints(points?: AreaBoundaryPoint[]) {
   if (!Array.isArray(points)) {
     return [] as AreaBoundaryPoint[];
@@ -206,6 +215,7 @@ const PropertiesList = () => {
   const [maxPriceFilter, setMaxPriceFilter] = useState("");
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
   const [deletingPropertyIds, setDeletingPropertyIds] = useState<string[]>([]);
+  const [expandedPropertyNotes, setExpandedPropertyNotes] = useState<Record<string, boolean>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
@@ -711,6 +721,13 @@ const PropertiesList = () => {
     openDeleteDialog(selectedPropertyIds);
   };
 
+  function togglePropertyNotes(propertyId: string) {
+    setExpandedPropertyNotes((current) => ({
+      ...current,
+      [propertyId]: !current[propertyId],
+    }));
+  }
+
   async function handleConfirmDeleteDialog() {
     if (dialogPropertyCount === 0 || dialogIsDeleting) {
       return;
@@ -1192,6 +1209,13 @@ const PropertiesList = () => {
               {paginatedProperties.map((p) => {
                 const cityName = getCityName(p.city_id);
                 const showCity = cityName.trim().length > 0 && !p.title.toLowerCase().includes(cityName.toLowerCase());
+                const propertyNotes = normalizePropertyNotes(p.internal_notes);
+                const hasPropertyNotes = propertyNotes.length > 0;
+                const shouldTruncateNotes = propertyNotes.length > PROPERTY_NOTES_PREVIEW_LENGTH;
+                const notesExpanded = !!expandedPropertyNotes[p.id];
+                const notesPreview = shouldTruncateNotes && !notesExpanded
+                  ? propertyNotes.slice(0, PROPERTY_NOTES_PREVIEW_LENGTH).trimEnd()
+                  : propertyNotes;
 
                 return (
                   <div
@@ -1249,6 +1273,29 @@ const PropertiesList = () => {
                           {p.condition.replaceAll("_", " ")}
                         </span>
                       </div>
+
+                      {hasPropertyNotes ? (
+                        <div className="rounded-md border border-border/70 bg-muted/25 px-2.5 py-2">
+                          <p className="text-xs leading-relaxed text-foreground/90">
+                            <span className="font-semibold text-foreground">{getPropertyCode(p)}</span>{" "}
+                            {notesPreview}
+                            {shouldTruncateNotes && !notesExpanded ? "... " : " "}
+                            {shouldTruncateNotes ? (
+                              <button
+                                type="button"
+                                className="font-semibold text-muted-foreground hover:text-foreground"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  togglePropertyNotes(p.id);
+                                }}
+                              >
+                                {notesExpanded ? "less" : "more"}
+                              </button>
+                            ) : null}
+                          </p>
+                        </div>
+                      ) : null}
 
                       <div className="flex items-center justify-end gap-1 pt-1" onClick={(event) => event.stopPropagation()}>
                         <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>

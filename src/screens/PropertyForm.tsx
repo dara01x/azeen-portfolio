@@ -638,7 +638,7 @@ const PropertyForm = () => {
       });
 
       setLocalImageFiles({});
-  clearLocalVideoSelection();
+      clearLocalVideoSelection();
 
       router.push("/properties");
     } catch (submitError) {
@@ -658,19 +658,21 @@ const PropertyForm = () => {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-8">
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild>
-          <Link href="/properties"><ArrowLeft className="h-4 w-4" /></Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold tracking-tight">{isEdit ? "Edit Property" : "Create Property"}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Fill in the details below to {isEdit ? "update" : "create"} a property listing</p>
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex items-start gap-3 sm:flex-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild>
+            <Link href="/properties"><ArrowLeft className="h-4 w-4" /></Link>
+          </Button>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight">{isEdit ? "Edit Property" : "Create Property"}</h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">Fill in the details below to {isEdit ? "update" : "create"} a property listing</p>
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           {isEdit ? (
             <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" disabled={saving || loading || deleting}>
+                <Button variant="destructive" className="w-full sm:w-auto" disabled={saving || loading || deleting}>
                   Delete Property
                 </Button>
               </AlertDialogTrigger>
@@ -698,8 +700,8 @@ const PropertyForm = () => {
               </AlertDialogContent>
             </AlertDialog>
           ) : null}
-          <Button variant="outline" asChild><Link href="/properties">Cancel</Link></Button>
-          <Button onClick={handleSubmit} disabled={saving || loading || deleting}>{saving ? "Saving..." : isEdit ? "Save Changes" : "Create Property"}</Button>
+          <Button variant="outline" className="w-full sm:w-auto" asChild><Link href="/properties">Cancel</Link></Button>
+          <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving || loading || deleting}>{saving ? "Saving..." : isEdit ? "Save Changes" : "Create Property"}</Button>
         </div>
       </div>
 
