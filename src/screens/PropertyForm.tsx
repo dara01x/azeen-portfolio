@@ -53,6 +53,7 @@ type CoordinatesValue = {
 };
 
 type LocalImageFileMap = Record<string, File>;
+type PropertyFormState = Omit<Property, "id" | "listing_type">;
 
 const OWNERSHIP_TYPE_OPTIONS = [
   { value: "freehold", label: "Freehold" },
@@ -94,7 +95,7 @@ function formatPriceInput(value: number): string {
 }
 
 function buildInternalPropertyTitle(
-  input: Omit<Property, "id">,
+  input: PropertyFormState,
   propertyTypes: PropertyType[],
   cities: City[],
 ): string {
@@ -205,8 +206,8 @@ function getPreferredText(...values: Array<string | undefined>) {
   return "";
 }
 
-const defaultProperty: Omit<Property, "id"> = {
-  title: "", type_id: "", listing_type: "sale", listing_date: "", status: "available",
+const defaultProperty: PropertyFormState = {
+  title: "", type_id: "", listing_date: "", status: "available",
   price: 0, currency: "USD", payment_type: "cash",
   city_id: "", area: "", address_en: "", address_ku: "", address_ar: "",
   area_size: 0, bedrooms: 0, suit_rooms: 0, bathrooms: 0, balconies: 0, floors: 1, condition: "new",
@@ -240,7 +241,7 @@ const PropertyForm = () => {
   const paramId = params?.id;
   const id = Array.isArray(paramId) ? paramId[0] : paramId;
   const isEdit = !!id && id !== "new";
-  const [form, setForm] = useState<Omit<Property, "id">>(defaultProperty);
+  const [form, setForm] = useState<PropertyFormState>(defaultProperty);
   const [loading, setLoading] = useState(isEdit);
   const [lookupsLoading, setLookupsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -375,7 +376,7 @@ const PropertyForm = () => {
         }
 
         setLocalImageFiles({});
-        const { id: _id, ...rest } = property;
+        const { id: _id, listing_type: _listingType, ...rest } = property;
         setForm({ ...defaultProperty, ...rest });
       })
       .catch((loadError) => {
@@ -445,7 +446,7 @@ const PropertyForm = () => {
         form.address_ar,
       ).trim();
 
-      const payload: Omit<Property, "id"> = {
+      const payload: PropertyFormState = {
         ...form,
         currency: form.currency || "USD",
         title: form.title.trim() || buildInternalPropertyTitle(form, propertyTypes, cities),
@@ -646,12 +647,6 @@ const PropertyForm = () => {
               <Select value={form.type_id} onValueChange={v => update("type_id", v)}>
                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>{propertyTypes.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2"><Label>Listing Type (Optional)</Label>
-              <Select value={form.listing_type} onValueChange={v => update("listing_type", v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="sale">Sale</SelectItem><SelectItem value="rent">Rent</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label>Date (Optional)</Label><Input type="date" value={form.listing_date || ""} onChange={e => update("listing_date", e.target.value || undefined)} /></div>

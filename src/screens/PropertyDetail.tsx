@@ -245,7 +245,6 @@ const PropertyDetail = () => {
 
   const typeName = findVariableName(propertyTypes, property.type_id);
   const cityName = findVariableName(cities, property.city_id);
-  const listingTypeLabel = property.listing_type === "sale" ? "For Sale" : "For Rent";
   const paymentTypeLabel = formatEnumLabel(property.payment_type);
   const ownershipTypeLabel = formatEnumLabel(property.ownership_type);
   const assignedCompanyName = (() => {
@@ -304,7 +303,7 @@ const PropertyDetail = () => {
           </div>
 
           <div className="flex-1 min-w-0 flex items-center justify-center gap-2">
-            <p className="font-semibold text-slate-800 truncate">{typeName} · {listingTypeLabel}</p>
+            <p className="font-semibold text-slate-800 truncate">{typeName}</p>
           </div>
 
           <Button asChild className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium">
@@ -413,10 +412,6 @@ const PropertyDetail = () => {
               <div>
                 <p className="text-xs text-slate-400 uppercase">Type</p>
                 <p className="text-sm font-semibold text-slate-700">{typeName}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase">Listing Type</p>
-                <p className="text-sm font-semibold text-slate-700">{listingTypeLabel}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-400 uppercase">Ownership Type</p>
@@ -531,7 +526,6 @@ const PropertyDetail = () => {
                   <Field label="Property ID" value={propertyCode} />
                   <Field label="Type" value={typeName} />
                   <Field label="Area" value={property.area} />
-                  <Field label="Listing Type" value={listingTypeLabel} />
                   <Field label="Date" value={propertyDateLabel} />
                   <Field label="Ownership Type" value={ownershipTypeLabel} />
                 </div>
@@ -568,7 +562,6 @@ const PropertyDetail = () => {
                   <Field label="Price" value={property.price.toLocaleString()} />
                   <Field label="Currency" value={property.currency} />
                   <Field label="Payment Type" value={paymentTypeLabel} />
-                  <Field label="Listing" value={listingTypeLabel} />
                 </div>
 
                 <Separator />

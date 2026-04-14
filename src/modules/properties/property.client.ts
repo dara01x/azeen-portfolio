@@ -3,6 +3,10 @@
 import { auth } from "@/lib/firebase/client";
 import type { Property } from "@/types";
 
+type PropertyWritePayload = Omit<Property, "id" | "listing_type"> & {
+  listing_type?: Property["listing_type"];
+};
+
 type PropertyApiItem = Property & {
   created_at?: string | null;
   updated_at?: string | null;
@@ -72,7 +76,7 @@ export async function getPropertyById(id: string): Promise<PropertyApiItem | nul
   return properties.find((property) => property.id === id) || null;
 }
 
-export async function createProperty(data: Omit<Property, "id">): Promise<PropertyApiItem> {
+export async function createProperty(data: PropertyWritePayload): Promise<PropertyApiItem> {
   const payload = await authorizedJsonFetch("/api/properties/create", {
     method: "POST",
     body: JSON.stringify({ data }),
@@ -81,7 +85,7 @@ export async function createProperty(data: Omit<Property, "id">): Promise<Proper
   return payload.property as PropertyApiItem;
 }
 
-export async function updateProperty(id: string, data: Omit<Property, "id">): Promise<PropertyApiItem> {
+export async function updateProperty(id: string, data: PropertyWritePayload): Promise<PropertyApiItem> {
   const payload = await authorizedJsonFetch("/api/properties/update", {
     method: "PUT",
     body: JSON.stringify({ id, data }),

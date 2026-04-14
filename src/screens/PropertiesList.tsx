@@ -333,22 +333,6 @@ const PropertiesList = () => {
 
   const getTypeName = (id: string) => propertyTypes.find((type) => type.id === id)?.name || id;
   const getCityName = (id: string) => cities.find((city) => city.id === id)?.name || id;
-  const getListingTypeLabel = (listingType: string) => {
-    const normalized = listingType.replaceAll("_", " ").trim();
-    if (!normalized) {
-      return "Listing";
-    }
-
-    if (normalized.toLowerCase() === "sale") {
-      return "For Sale";
-    }
-
-    if (normalized.toLowerCase() === "rent") {
-      return "For Rent";
-    }
-
-    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-  };
 
   const parseFilterNumber = (value: string) => {
     const normalized = value.replace(/[,_\s]/g, "").trim();
@@ -1201,9 +1185,6 @@ const PropertiesList = () => {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-                          {getListingTypeLabel(p.listing_type)}
-                        </span>
                         <span className="rounded-full border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
                           {p.bedrooms} bed • {p.suit_rooms} suit
                         </span>
