@@ -294,6 +294,7 @@ const ProjectDetail = () => {
     project.description_ar,
   );
   const notesLabel = firstNonEmpty(project.internal_notes);
+  const videoUrl = firstNonEmpty(project.video_url);
   const assignedCompany = project.assigned_company_id
     ? users.find((item) => item.id === project.assigned_company_id && item.role === "company")
     : undefined;
@@ -352,9 +353,10 @@ const ProjectDetail = () => {
   const showDescriptionCard = !!descriptionLabel;
   const showNotesCard = !!notesLabel;
   const showTypesCard = typeNames.length > 0;
+  const showVideoCard = !!videoUrl;
   const showRelationsCard = relationItems.length > 0;
   const showLeftColumn = showLocationCard || showDescriptionCard || showNotesCard;
-  const showRightColumn = showTypesCard || showRelationsCard;
+  const showRightColumn = showTypesCard || showVideoCard || showRelationsCard;
   const getUnitTypeLabel = (typeId?: string) => (typeId ? findVariableName(propertyTypes, typeId) : "No type");
   const closeUnitView = () => {
     setIsUnitImageZoomOpen(false);
@@ -564,6 +566,29 @@ const ProjectDetail = () => {
                           </span>
                         ))}
                       </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
+                {showVideoCard ? (
+                  <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Video</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <video
+                        className="w-full max-h-72 rounded-xl border bg-black object-contain"
+                        src={videoUrl}
+                        controls
+                      />
+                      <a
+                        href={videoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-primary hover:underline break-all"
+                      >
+                        Open video in new tab
+                      </a>
                     </CardContent>
                   </Card>
                 ) : null}
