@@ -3,8 +3,9 @@
 import { auth } from "@/lib/firebase/client";
 import type { Property } from "@/types";
 
-type PropertyWritePayload = Omit<Property, "id" | "listing_type"> & {
+type PropertyWritePayload = Omit<Property, "id" | "listing_type" | "payment_type"> & {
   listing_type?: Property["listing_type"];
+  payment_type?: Property["payment_type"];
 };
 
 type PropertyApiItem = Property & {

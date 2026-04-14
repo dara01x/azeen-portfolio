@@ -75,16 +75,6 @@ function findVariableName(items: AppVariableItem[], id?: string) {
   return items.find((item) => item.id === id)?.name || id;
 }
 
-function formatEnumLabel(value?: string | null) {
-  if (!value) {
-    return "—";
-  }
-
-  return value
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function formatOptionalMetric(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : "—";
 }
@@ -244,7 +234,6 @@ const PropertyDetail = () => {
 
   const typeName = findVariableName(propertyTypes, property.type_id);
   const cityName = findVariableName(cities, property.city_id);
-  const paymentTypeLabel = formatEnumLabel(property.payment_type);
   const assignedCompanyName = (() => {
     if (!property.assigned_company_id) {
       return "—";
@@ -391,7 +380,6 @@ const PropertyDetail = () => {
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">ASKING PRICE</p>
               <p className="text-4xl font-bold text-slate-900 mt-1">{priceLabel}</p>
-              <p className="text-sm text-slate-500 mt-1">{paymentTypeLabel}</p>
               <p className="text-sm text-slate-500 mt-1">Date Listed: {propertyDateLabel}</p>
               <p className="text-xs font-mono text-slate-500 mt-2">ID: {propertyCode}</p>
             </div>
@@ -554,7 +542,6 @@ const PropertyDetail = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Price" value={property.price.toLocaleString()} />
                   <Field label="Currency" value={property.currency} />
-                  <Field label="Payment Type" value={paymentTypeLabel} />
                 </div>
               </CardContent>
             </Card>

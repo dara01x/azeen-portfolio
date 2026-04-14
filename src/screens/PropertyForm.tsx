@@ -53,7 +53,7 @@ type CoordinatesValue = {
 };
 
 type LocalImageFileMap = Record<string, File>;
-type PropertyFormState = Omit<Property, "id" | "listing_type" | "ownership_type">;
+type PropertyFormState = Omit<Property, "id" | "listing_type" | "ownership_type" | "payment_type">;
 
 const OPTIONAL_LINK_NONE = "__none__";
 
@@ -201,7 +201,7 @@ function getPreferredText(...values: Array<string | undefined>) {
 
 const defaultProperty: PropertyFormState = {
   title: "", type_id: "", listing_date: "", status: "available",
-  price: 0, currency: "USD", payment_type: "cash",
+  price: 0, currency: "USD",
   city_id: "", area: "", address_en: "", address_ku: "", address_ar: "",
   area_size: 0, bedrooms: 0, suit_rooms: 0, bathrooms: 0, balconies: 0, floors: 1, condition: "new",
   amenities: [], description_en: "", description_ku: "", description_ar: "",
@@ -368,7 +368,13 @@ const PropertyForm = () => {
         }
 
         setLocalImageFiles({});
-        const { id: _id, listing_type: _listingType, ownership_type: _ownershipType, ...rest } = property;
+        const {
+          id: _id,
+          listing_type: _listingType,
+          ownership_type: _ownershipType,
+          payment_type: _paymentType,
+          ...rest
+        } = property;
         setForm({ ...defaultProperty, ...rest });
       })
       .catch((loadError) => {
@@ -645,19 +651,13 @@ const PropertyForm = () => {
           </div>
         </FormSection>
 
-        <FormSection title="Pricing" description="Set the price and payment terms">
-          <div className="grid gap-5 sm:grid-cols-3">
+        <FormSection title="Pricing" description="Set the pricing details">
+          <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2"><RequiredLabel>Price</RequiredLabel><Input type="text" inputMode="numeric" value={formatPriceInput(form.price)} onChange={e => update("price", parsePriceInput(e.target.value))} placeholder="0" /></div>
             <div className="space-y-2"><Label>Currency (Optional)</Label>
               <Select value={form.currency} onValueChange={v => update("currency", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="USD">USD</SelectItem><SelectItem value="IQD">IQD</SelectItem></SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2"><Label>Payment Type (Optional)</Label>
-              <Select value={form.payment_type} onValueChange={v => update("payment_type", v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="installment">Installment</SelectItem></SelectContent>
               </Select>
             </div>
           </div>
