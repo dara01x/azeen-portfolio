@@ -246,7 +246,6 @@ const PropertyDetail = () => {
   const typeName = findVariableName(propertyTypes, property.type_id);
   const cityName = findVariableName(cities, property.city_id);
   const paymentTypeLabel = formatEnumLabel(property.payment_type);
-  const ownershipTypeLabel = formatEnumLabel(property.ownership_type);
   const assignedCompanyName = (() => {
     if (!property.assigned_company_id) {
       return "—";
@@ -413,10 +412,6 @@ const PropertyDetail = () => {
                 <p className="text-xs text-slate-400 uppercase">Type</p>
                 <p className="text-sm font-semibold text-slate-700">{typeName}</p>
               </div>
-              <div>
-                <p className="text-xs text-slate-400 uppercase">Ownership Type</p>
-                <p className="text-sm font-semibold text-slate-700">{ownershipTypeLabel}</p>
-              </div>
             </div>
 
             {canViewAgentContact ? (
@@ -527,7 +522,6 @@ const PropertyDetail = () => {
                   <Field label="Type" value={typeName} />
                   <Field label="Area" value={property.area} />
                   <Field label="Date" value={propertyDateLabel} />
-                  <Field label="Ownership Type" value={ownershipTypeLabel} />
                 </div>
               </CardContent>
             </Card>

@@ -53,14 +53,7 @@ type CoordinatesValue = {
 };
 
 type LocalImageFileMap = Record<string, File>;
-type PropertyFormState = Omit<Property, "id" | "listing_type">;
-
-const OWNERSHIP_TYPE_OPTIONS = [
-  { value: "freehold", label: "Freehold" },
-  { value: "leasehold", label: "Leasehold" },
-  { value: "power_of_attorney", label: "Power of Attorney" },
-  { value: "other", label: "Other" },
-] as const;
+type PropertyFormState = Omit<Property, "id" | "listing_type" | "ownership_type">;
 
 const OPTIONAL_LINK_NONE = "__none__";
 
@@ -211,7 +204,6 @@ const defaultProperty: PropertyFormState = {
   price: 0, currency: "USD", payment_type: "cash",
   city_id: "", area: "", address_en: "", address_ku: "", address_ar: "",
   area_size: 0, bedrooms: 0, suit_rooms: 0, bathrooms: 0, balconies: 0, floors: 1, condition: "new",
-  ownership_type: "",
   amenities: [], description_en: "", description_ku: "", description_ar: "",
   images: [], contact_name: "", primary_mobile_number: "", internal_notes: "",
 };
@@ -376,7 +368,7 @@ const PropertyForm = () => {
         }
 
         setLocalImageFiles({});
-        const { id: _id, listing_type: _listingType, ...rest } = property;
+        const { id: _id, listing_type: _listingType, ownership_type: _ownershipType, ...rest } = property;
         setForm({ ...defaultProperty, ...rest });
       })
       .catch((loadError) => {
@@ -650,16 +642,6 @@ const PropertyForm = () => {
               </Select>
             </div>
             <div className="space-y-2"><Label>Date (Optional)</Label><Input type="date" value={form.listing_date || ""} onChange={e => update("listing_date", e.target.value || undefined)} /></div>
-            <div className="space-y-2"><Label>Ownership Type (Optional)</Label>
-              <Select value={form.ownership_type || ""} onValueChange={v => update("ownership_type", v)}>
-                <SelectTrigger><SelectValue placeholder="Select ownership type" /></SelectTrigger>
-                <SelectContent>
-                  {OWNERSHIP_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </FormSection>
 
