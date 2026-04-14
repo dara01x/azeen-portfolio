@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/EmptyState";
+import { StatusBadge } from "@/components/StatusBadge";
 import { getProjectById } from "@/modules/projects/project.client";
 import { getUnits } from "@/modules/units/unit.client";
 import { getUsers } from "@/modules/users/user.client";
@@ -286,7 +287,6 @@ const ProjectDetail = () => {
   const typeNames = (project.property_type_ids || []).map((item) => findVariableName(propertyTypes, item));
   const typeLabel = typeNames.length > 0 ? typeNames.join(", ") : "";
   const areaLabel = firstNonEmpty(project.area);
-  const addressLabel = firstNonEmpty(project.address, project.address_en, project.address_ku, project.address_ar);
   const descriptionLabel = firstNonEmpty(
     project.description,
     project.description_en,
@@ -346,7 +346,6 @@ const ProjectDetail = () => {
   const locationItems = [
     cityLabel ? { label: "City", value: cityLabel } : null,
     areaLabel ? { label: "Area", value: areaLabel } : null,
-    addressLabel ? { label: "Address", value: addressLabel } : null,
   ].filter((item): item is { label: string; value: string } => item !== null);
 
   const showLocationCard = locationItems.length > 0;

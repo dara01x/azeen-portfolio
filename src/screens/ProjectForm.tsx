@@ -817,12 +817,6 @@ const ProjectForm = () => {
     setError(null);
 
     try {
-      const singleAddressValue = getPreferredText(
-        form.address_en,
-        form.address_ku,
-        form.address_ar,
-        form.address,
-      ).trim();
       const singleDescriptionValue = getPreferredText(
         form.description_en,
         form.description_ku,
@@ -838,10 +832,6 @@ const ProjectForm = () => {
         description_ku: singleDescriptionValue,
         description_ar: singleDescriptionValue,
         area: form.area.trim(),
-        address: singleAddressValue,
-        address_en: singleAddressValue,
-        address_ku: singleAddressValue,
-        address_ar: singleAddressValue,
         property_type_ids: Array.from(new Set(form.property_type_ids.map((item) => item.trim()).filter(Boolean))),
         amenities: Array.from(new Set((form.amenities || []).map((item) => item.trim()).filter(Boolean))),
         area_size: Number(form.area_size) || 0,
@@ -854,7 +844,7 @@ const ProjectForm = () => {
         throw new Error("Project name is required.");
       }
 
-      if (!payload.area) {
+      if (isEdit && !payload.area) {
         throw new Error("Area is required.");
       }
 
@@ -1019,9 +1009,9 @@ const ProjectForm = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Area *</Label>
+                <Label>{isEdit ? "Area *" : "Area (Optional)"}</Label>
                 <Select value={form.area} onValueChange={(value) => update("area", value)}>
-                  <SelectTrigger><SelectValue placeholder="Select area" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={isEdit ? "Select area" : "Select area (optional)"} /></SelectTrigger>
                   <SelectContent>
                     {form.area.trim() && !areaNames.includes(form.area.trim()) ? (
                       <SelectItem className="my-1 rounded-md border border-border/60" value={form.area}>Current: {form.area}</SelectItem>
@@ -1036,20 +1026,6 @@ const ProjectForm = () => {
                 ) : null}
               </div>
 
-              <div className="sm:col-span-2 space-y-2">
-                <Label>Address (Optional)</Label>
-                <Input
-                  value={getPreferredText(form.address_en, form.address_ku, form.address_ar, form.address)}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    update("address", value);
-                    update("address_en", value);
-                    update("address_ku", value);
-                    update("address_ar", value);
-                  }}
-                  placeholder="Enter address in any language"
-                />
-              </div>
             </div>
           </FormSection>
 
