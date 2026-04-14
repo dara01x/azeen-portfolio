@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Pencil, Plus, Trash2 } from "lucide-react";
@@ -9,7 +9,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
 import { ImageUpload } from "@/components/ImageUpload";
 import { useAuth } from "@/lib/auth/useAuth";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
@@ -20,7 +19,6 @@ import {
   getProjectById,
   updateProject,
   uploadProjectImageBlobUrls,
-  uploadProjectVideoFile,
 } from "@/modules/projects/project.client";
 import {
   createUnit,
@@ -35,7 +33,6 @@ type LocalImageFileMap = Record<string, File>;
 
 const OPTIONAL_LINK_NONE = "__none__";
 const DIRECTION_OPTIONS = ["north", "east", "south", "west"];
-const MAX_PROJECT_VIDEO_FILE_SIZE_BYTES = 30 * 1024 * 1024;
 
 function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   const uploadedImages: string[] = [];
@@ -288,9 +285,6 @@ const ProjectForm = () => {
   const [propertyTypes, setPropertyTypes] = useState<AppVariableItem[]>([]);
   const [companies, setCompanies] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
-  const [localVideoFile, setLocalVideoFile] = useState<File | null>(null);
-  const [localVideoPreviewUrl, setLocalVideoPreviewUrl] = useState("");
-  const videoInputRef = useRef<HTMLInputElement | null>(null);
   const [unitLocalImageFiles, setUnitLocalImageFiles] = useState<LocalImageFileMap>({});
   const [units, setUnits] = useState<Unit[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
@@ -304,53 +298,6 @@ const ProjectForm = () => {
 
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-  };
-  const activeVideoUrl = localVideoPreviewUrl || form.video_url || "";
-
-  const clearLocalVideoSelection = () => {
-    setLocalVideoFile(null);
-    setLocalVideoPreviewUrl((current) => {
-      if (current.startsWith("blob:")) {
-        URL.revokeObjectURL(current);
-      }
-
-      return "";
-    });
-
-    if (videoInputRef.current) {
-      videoInputRef.current.value = "";
-    }
-  };
-
-  const handleVideoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (!selectedFile) {
-      return;
-    }
-
-    if (!selectedFile.type.startsWith("video/")) {
-      setError("Please select a valid video file.");
-      event.target.value = "";
-      return;
-    }
-
-    if (selectedFile.size > MAX_PROJECT_VIDEO_FILE_SIZE_BYTES) {
-      setError("Video is too large. Please use a file up to 30MB.");
-      event.target.value = "";
-      return;
-    }
-
-    setError(null);
-    setLocalVideoFile(selectedFile);
-    update("video_url", "");
-
-    setLocalVideoPreviewUrl((current) => {
-      if (current.startsWith("blob:")) {
-        URL.revokeObjectURL(current);
-      }
-
-      return URL.createObjectURL(selectedFile);
-    });
   };
 
   const clearUnitLocalImageFiles = () => {
@@ -369,14 +316,6 @@ const ProjectForm = () => {
     () => Array.from(new Set(areas.map((item) => item.name.trim()).filter(Boolean))),
     [areas],
   );
-
-  useEffect(() => {
-    return () => {
-      if (localVideoPreviewUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(localVideoPreviewUrl);
-      }
-    };
-  }, [localVideoPreviewUrl]);
 
   useEffect(() => {
     if (authLoading) {
@@ -457,7 +396,6 @@ const ProjectForm = () => {
     if (!isEdit) {
       setLoading(false);
       setLocalImageFiles({});
-      clearLocalVideoSelection();
       return;
     }
 
@@ -482,7 +420,6 @@ const ProjectForm = () => {
         }
 
         setLocalImageFiles({});
-        clearLocalVideoSelection();
         const { id: _id, ...rest } = project;
 
         setForm({
@@ -909,7 +846,6 @@ const ProjectForm = () => {
         amenities: Array.from(new Set((form.amenities || []).map((item) => item.trim()).filter(Boolean))),
         area_size: Number(form.area_size) || 0,
         starting_price: Number(form.starting_price) || 0,
-        video_url: form.video_url?.trim() || undefined,
         assigned_company_id: form.assigned_company_id || undefined,
         internal_notes: (form.internal_notes || "").trim(),
       };
@@ -928,13 +864,8 @@ const ProjectForm = () => {
 
       const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeLocalFiles);
       const preferredMainImage = resolvePreferredMainImage(payload.main_image, payload.images);
-      let resolvedVideoUrl = (payload.video_url || "").trim();
 
       if (isEdit && id) {
-        if (localVideoFile) {
-          resolvedVideoUrl = await uploadProjectVideoFile(id, localVideoFile);
-        }
-
         const newlyUploadedImages = await uploadProjectImageBlobUrls(id, localBlobImages, activeLocalFiles);
         if (localBlobImages.length > 0 && newlyUploadedImages.length === 0) {
           throw new Error("Image upload did not complete. Please reselect images and try again.");
@@ -952,7 +883,6 @@ const ProjectForm = () => {
           ...payload,
           images: allImages,
           main_image: selectedMainImage || allImages[0],
-          video_url: resolvedVideoUrl,
         });
       } else {
         const initialMainImage =
@@ -964,12 +894,7 @@ const ProjectForm = () => {
           ...payload,
           images: uploadedImages,
           main_image: initialMainImage,
-          video_url: resolvedVideoUrl || undefined,
         });
-
-        if (localVideoFile) {
-          resolvedVideoUrl = await uploadProjectVideoFile(created.id, localVideoFile);
-        }
 
         const newlyUploadedImages = await uploadProjectImageBlobUrls(
           created.id,
@@ -983,7 +908,7 @@ const ProjectForm = () => {
 
         const allImages = [...uploadedImages, ...newlyUploadedImages];
 
-        if (allImages.length > 0 || localVideoFile) {
+        if (allImages.length > 0) {
           const selectedMainImage = resolveMainImageAfterUpload(
             preferredMainImage,
             uploadedImages,
@@ -995,7 +920,6 @@ const ProjectForm = () => {
             ...payload,
             images: allImages,
             main_image: selectedMainImage || allImages[0],
-            video_url: resolvedVideoUrl,
           });
         }
       }
@@ -1005,7 +929,6 @@ const ProjectForm = () => {
       });
 
       setLocalImageFiles({});
-      clearLocalVideoSelection();
       router.push("/projects");
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Failed to save project.";
@@ -1153,7 +1076,7 @@ const ProjectForm = () => {
             </div>
           </FormSection>
 
-          <FormSection title="Media" description="Upload project images and video">
+          <FormSection title="Media" description="Upload project images">
             <div className="space-y-5">
               <div>
                 <Label className="mb-3 block">Images (Optional)</Label>
@@ -1196,47 +1119,6 @@ const ProjectForm = () => {
                     update("main_image", nextMainImage);
                   }}
                 />
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3">
-                <Label className="block">Video (Optional)</Label>
-                <Input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/*"
-                  onChange={handleVideoFileChange}
-                />
-                <p className="text-xs text-muted-foreground">Supported: MP4, MOV, WEBM, MKV. Max 30MB.</p>
-
-                {activeVideoUrl ? (
-                  <div className="space-y-2">
-                    <video
-                      className="w-full max-h-64 rounded-md border bg-black object-contain"
-                      src={activeVideoUrl}
-                      controls
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          clearLocalVideoSelection();
-                          update("video_url", "");
-                        }}
-                      >
-                        Remove Video
-                      </Button>
-                      {localVideoFile ? (
-                        <p className="text-xs text-muted-foreground truncate">{localVideoFile.name}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No video uploaded.</p>
-                )}
               </div>
             </div>
           </FormSection>
