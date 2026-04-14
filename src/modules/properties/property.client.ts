@@ -9,6 +9,8 @@ type PropertyApiItem = Property & {
   sold_at?: string | null;
 };
 
+const MAX_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024;
+
 function extensionFromMimeType(contentType: string) {
   if (contentType.includes("jpeg") || contentType.includes("jpg")) {
     return "jpg";
@@ -111,51 +113,63 @@ export async function uploadPropertyImageBlobUrls(
     headers.set("Authorization", `Bearer ${idToken}`);
   }
 
-  const formData = new FormData();
-  formData.append("propertyId", propertyId);
+  const uploadedUrls: string[] = [];
 
-  await Promise.all(
-    imageBlobUrls.map(async (blobUrl, index) => {
-      const file = localFilesByUrl[blobUrl];
-      const blob = file
-        ? file
-        : await (async () => {
-            const blobResponse = await fetch(blobUrl);
-            if (!blobResponse.ok) {
-              throw new Error("Failed to read selected image for upload.");
-            }
+  for (const [index, blobUrl] of imageBlobUrls.entries()) {
+    const file = localFilesByUrl[blobUrl];
+    const blob = file
+      ? file
+      : await (async () => {
+          const blobResponse = await fetch(blobUrl);
+          if (!blobResponse.ok) {
+            throw new Error("Failed to read selected image for upload.");
+          }
 
-            return blobResponse.blob();
-          })();
+          return blobResponse.blob();
+        })();
 
-      const contentType = blob.type || "application/octet-stream";
-      const ext = extensionFromMimeType(contentType);
-      const fileName = file?.name || `property-image-${index + 1}.${ext}`;
-      const uploadFile =
-        file || new File([blob], fileName, {
-          type: contentType,
-        });
+    const contentType = blob.type || "application/octet-stream";
+    const ext = extensionFromMimeType(contentType);
+    const fileName = file?.name || `property-image-${index + 1}.${ext}`;
+    const uploadFile =
+      file ||
+      new File([blob], fileName, {
+        type: contentType,
+      });
 
-      formData.append("files", uploadFile, uploadFile.name);
-    }),
-  );
+    if (uploadFile.size > MAX_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES) {
+      throw new Error("Image is too large. Please use images up to 4MB each.");
+    }
 
-  const response = await fetch("/api/properties/upload-images", {
-    method: "POST",
-    headers,
-    body: formData,
-    cache: "no-store",
-  });
+    const formData = new FormData();
+    formData.append("propertyId", propertyId);
+    formData.append("files", uploadFile, uploadFile.name);
 
-  const payload = await response.json().catch(() => ({}));
+    const response = await fetch("/api/properties/upload-images", {
+      method: "POST",
+      headers,
+      body: formData,
+      cache: "no-store",
+    });
 
-  if (!response.ok) {
-    const message =
-      typeof payload?.error === "string"
-        ? payload.error
-        : `Property image upload failed (${response.status}).`;
-    throw new Error(message);
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      if (response.status === 413) {
+        throw new Error("Image upload request is too large. Please upload smaller images (up to 4MB each).");
+      }
+
+      const message =
+        typeof payload?.error === "string"
+          ? payload.error
+          : `Property image upload failed (${response.status}).`;
+      throw new Error(message);
+    }
+
+    if (Array.isArray(payload.urls) && payload.urls.length > 0) {
+      uploadedUrls.push(payload.urls[0]);
+    }
   }
 
-  return Array.isArray(payload.urls) ? payload.urls : [];
+  return uploadedUrls;
 }

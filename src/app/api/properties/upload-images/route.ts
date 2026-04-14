@@ -4,6 +4,7 @@ import { requireApiActor } from "@/modules/properties/property.api-auth";
 import { assertPropertyWriteAccess } from "@/modules/properties/property.service";
 
 export const runtime = "nodejs";
+const MAX_PROPERTY_IMAGE_SIZE_BYTES = 4 * 1024 * 1024;
 
 function extensionFromMimeType(contentType: string) {
   if (contentType.includes("jpeg") || contentType.includes("jpg")) {
@@ -86,6 +87,17 @@ export async function POST(request: Request) {
 
     if (fileEntries.length === 0) {
       return Response.json({ success: false, error: "At least one image file is required." }, { status: 400 });
+    }
+
+    const oversizedEntry = fileEntries.find((entry) => entry.blob.size > MAX_PROPERTY_IMAGE_SIZE_BYTES);
+    if (oversizedEntry) {
+      return Response.json(
+        {
+          success: false,
+          error: "Each image must be 4MB or smaller.",
+        },
+        { status: 413 },
+      );
     }
 
     const bucket = getAdminStorageBucket();
