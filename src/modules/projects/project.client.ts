@@ -1,6 +1,7 @@
 "use client";
 
-import { auth } from "@/lib/firebase/client";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { auth, storage } from "@/lib/firebase/client";
 import type { Project } from "@/types";
 
 type ProjectApiItem = Project & {
@@ -16,6 +17,11 @@ type JsonObject = { [key: string]: JsonValue };
 function extensionFromMimeType(type: string): string {
   const normalized = type.toLowerCase();
 
+  if (normalized.includes("mp4")) return ".mp4";
+  if (normalized.includes("webm")) return ".webm";
+  if (normalized.includes("quicktime")) return ".mov";
+  if (normalized.includes("x-matroska")) return ".mkv";
+
   if (normalized.includes("png")) return ".png";
   if (normalized.includes("webp")) return ".webp";
   if (normalized.includes("gif")) return ".gif";
@@ -24,6 +30,35 @@ function extensionFromMimeType(type: string): string {
   if (normalized.includes("jpeg") || normalized.includes("jpg")) return ".jpg";
 
   return ".jpg";
+}
+
+function sanitizeBaseName(fileName: string) {
+  const withoutExt = fileName.replace(/\.[^/.]+$/, "");
+  const normalized = withoutExt
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+  return normalized || "video";
+}
+
+function randomSuffix() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+async function uploadVideoDirectlyToFirebaseStorage(
+  objectPath: string,
+  file: File,
+): Promise<string> {
+  const storageRef = ref(storage, objectPath);
+
+  await uploadBytes(storageRef, file, {
+    contentType: file.type || "video/mp4",
+    cacheControl: "public,max-age=31536000,immutable",
+  });
+
+  return getDownloadURL(storageRef);
 }
 
 async function authorizedJsonFetch<TResponse>(
@@ -185,6 +220,17 @@ export async function uploadProjectVideoFile(projectId: string, file: File): Pro
 
   if (file.size > MAX_PROJECT_VIDEO_UPLOAD_SIZE_BYTES) {
     throw new Error("Video is too large. Please use a file up to 30MB.");
+  }
+
+  const contentType = file.type || "video/mp4";
+  const ext = extensionFromMimeType(contentType);
+  const safeName = sanitizeBaseName(file.name || "project-video");
+  const objectPath = `projects/${projectId}/videos/${Date.now()}-${randomSuffix()}-${safeName}.${ext}`;
+
+  try {
+    return await uploadVideoDirectlyToFirebaseStorage(objectPath, file);
+  } catch {
+    // Fallback keeps compatibility if client-side storage rules block direct uploads.
   }
 
   const token = await user.getIdToken();

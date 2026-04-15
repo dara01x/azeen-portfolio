@@ -1,6 +1,7 @@
 "use client";
 
-import { auth } from "@/lib/firebase/client";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { auth, storage } from "@/lib/firebase/client";
 import type { Property } from "@/types";
 
 type PropertyWritePayload = Omit<Property, "id" | "listing_type" | "payment_type"> & {
@@ -16,6 +17,35 @@ type PropertyApiItem = Property & {
 
 const MAX_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024;
 const MAX_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024;
+
+function sanitizeBaseName(fileName: string) {
+  const withoutExt = fileName.replace(/\.[^/.]+$/, "");
+  const normalized = withoutExt
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+  return normalized || "video";
+}
+
+function randomSuffix() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+async function uploadVideoDirectlyToFirebaseStorage(
+  objectPath: string,
+  file: File,
+): Promise<string> {
+  const storageRef = ref(storage, objectPath);
+
+  await uploadBytes(storageRef, file, {
+    contentType: file.type || "video/mp4",
+    cacheControl: "public,max-age=31536000,immutable",
+  });
+
+  return getDownloadURL(storageRef);
+}
 
 function extensionFromMimeType(contentType: string) {
   if (contentType.includes("mp4")) {
@@ -213,6 +243,17 @@ export async function uploadPropertyVideoFile(propertyId: string, file: File): P
     throw new Error("Video is too large. Please use a file up to 500MB.");
   }
 
+  const contentType = file.type || "video/mp4";
+  const ext = extensionFromMimeType(contentType);
+  const safeName = sanitizeBaseName(file.name || "property-video");
+  const objectPath = `properties/${propertyId}/videos/${Date.now()}-${randomSuffix()}-${safeName}.${ext}`;
+
+  try {
+    return await uploadVideoDirectlyToFirebaseStorage(objectPath, file);
+  } catch {
+    // Fallback keeps compatibility if client-side storage rules block direct uploads.
+  }
+
   const idToken = await auth.currentUser?.getIdToken();
   const headers = new Headers();
 
@@ -222,7 +263,7 @@ export async function uploadPropertyVideoFile(propertyId: string, file: File): P
 
   const formData = new FormData();
   formData.append("propertyId", propertyId);
-  formData.append("file", file, file.name || `property-video.${extensionFromMimeType(file.type || "video/mp4")}`);
+  formData.append("file", file, file.name || `property-video.${extensionFromMimeType(contentType)}`);
 
   const response = await fetch("/api/properties/upload-video", {
     method: "POST",
