@@ -14,7 +14,7 @@ type PropertyApiItem = Property & {
   sold_at?: string | null;
 };
 
-const MAX_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024;
+const MAX_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024;
 const MAX_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES = 30 * 1024 * 1024;
 
 function extensionFromMimeType(contentType: string) {
@@ -160,7 +160,7 @@ export async function uploadPropertyImageBlobUrls(
       });
 
     if (uploadFile.size > MAX_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES) {
-      throw new Error("Image is too large. Please use images up to 4MB each.");
+      throw new Error("Image is too large. Please use images up to 500MB each.");
     }
 
     const formData = new FormData();
@@ -178,7 +178,7 @@ export async function uploadPropertyImageBlobUrls(
 
     if (!response.ok) {
       if (response.status === 413) {
-        throw new Error("Image upload request is too large. Please upload smaller images (up to 4MB each).");
+        throw new Error("Image upload request is too large. Please upload smaller images (up to 500MB each).");
       }
 
       const message =

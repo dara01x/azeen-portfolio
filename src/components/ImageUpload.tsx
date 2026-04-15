@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { ImagePlus, X } from "lucide-react";
 
 const MAX_IMAGE_COUNT = 10;
-const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024;
+const MAX_IMAGE_SIZE_BYTES = 500 * 1024 * 1024;
 
 type LocalImageEntry = {
   url: string;
@@ -45,7 +45,7 @@ export function ImageUpload({
     const acceptedFiles = sizeAcceptedFiles.slice(0, availableSlots);
 
     if (acceptedFiles.length === 0) {
-      setUploadError("No valid images were selected. Use image files up to 4MB each.");
+      setUploadError("No valid images were selected. Use image files up to 500MB each.");
       return;
     }
 
@@ -73,7 +73,7 @@ export function ImageUpload({
     if (oversizedFiles.length > 0 || droppedByCount > 0 || ignoredNonImages > 0) {
       const messages: string[] = [];
       if (oversizedFiles.length > 0) {
-        messages.push(`${oversizedFiles.length} file(s) were larger than 4MB`);
+        messages.push(`${oversizedFiles.length} file(s) were larger than 500MB`);
       }
       if (droppedByCount > 0) {
         messages.push(`${droppedByCount} file(s) exceeded the ${MAX_IMAGE_COUNT} image limit`);
@@ -146,7 +146,7 @@ export function ImageUpload({
         />
       </div>
 
-      <p className="text-xs text-muted-foreground">Max {MAX_IMAGE_COUNT} images, 4MB each.</p>
+      <p className="text-xs text-muted-foreground">Max {MAX_IMAGE_COUNT} images, 500MB each.</p>
       {uploadError ? <p className="text-xs text-destructive">{uploadError}</p> : null}
     </div>
   );

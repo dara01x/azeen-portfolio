@@ -4,7 +4,7 @@ import { requireApiActor } from "@/modules/properties/property.api-auth";
 import { assertPropertyWriteAccess } from "@/modules/properties/property.service";
 
 export const runtime = "nodejs";
-const MAX_PROPERTY_IMAGE_SIZE_BYTES = 4 * 1024 * 1024;
+const MAX_PROPERTY_IMAGE_SIZE_BYTES = 500 * 1024 * 1024;
 
 function extensionFromMimeType(contentType: string) {
   if (contentType.includes("jpeg") || contentType.includes("jpg")) {
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           success: false,
-          error: "Each image must be 4MB or smaller.",
+          error: "Each image must be 500MB or smaller.",
         },
         { status: 413 },
       );
