@@ -15,7 +15,7 @@ type PropertyApiItem = Property & {
 };
 
 const MAX_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024;
-const MAX_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES = 30 * 1024 * 1024;
+const MAX_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024;
 
 function extensionFromMimeType(contentType: string) {
   if (contentType.includes("mp4")) {
@@ -210,7 +210,7 @@ export async function uploadPropertyVideoFile(propertyId: string, file: File): P
   }
 
   if (file.size > MAX_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES) {
-    throw new Error("Video is too large. Please use a file up to 30MB.");
+    throw new Error("Video is too large. Please use a file up to 500MB.");
   }
 
   const idToken = await auth.currentUser?.getIdToken();
@@ -235,7 +235,11 @@ export async function uploadPropertyVideoFile(propertyId: string, file: File): P
 
   if (!response.ok) {
     if (response.status === 413) {
-      throw new Error("Video upload request is too large. Please upload a smaller video (up to 30MB).");
+      const message =
+        typeof payload?.error === "string"
+          ? payload.error
+          : "Video upload request is too large for this deployment. Please upload a smaller video.";
+      throw new Error(message);
     }
 
     const message =

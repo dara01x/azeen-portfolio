@@ -5,7 +5,7 @@ import { assertPropertyWriteAccess } from "@/modules/properties/property.service
 
 export const runtime = "nodejs";
 
-const MAX_PROPERTY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024;
+const MAX_PROPERTY_VIDEO_SIZE_BYTES = 500 * 1024 * 1024;
 
 function extensionFromMimeType(contentType: string) {
   if (contentType.includes("mp4")) {
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           success: false,
-          error: "Video must be 30MB or smaller.",
+          error: "Video must be 500MB or smaller.",
         },
         { status: 413 },
       );

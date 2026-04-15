@@ -57,7 +57,7 @@ type LocalImageFileMap = Record<string, File>;
 type PropertyFormState = Omit<Property, "id" | "listing_type" | "ownership_type" | "payment_type">;
 
 const OPTIONAL_LINK_NONE = "__none__";
-const MAX_PROPERTY_VIDEO_FILE_SIZE_BYTES = 30 * 1024 * 1024;
+const MAX_PROPERTY_VIDEO_FILE_SIZE_BYTES = 500 * 1024 * 1024;
 
 const TOWER_NUMBER_TYPE_KEYWORDS = ["apartment", "department", "villa", "شقة", "فيلا"];
 
@@ -284,7 +284,7 @@ const PropertyForm = () => {
     }
 
     if (selectedFile.size > MAX_PROPERTY_VIDEO_FILE_SIZE_BYTES) {
-      setError("Video is too large. Please use a file up to 30MB.");
+      setError("Video is too large. Please use a file up to 500MB.");
       event.target.value = "";
       return;
     }
@@ -904,7 +904,7 @@ const PropertyForm = () => {
                 accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/*"
                 onChange={handleVideoFileChange}
               />
-              <p className="text-xs text-muted-foreground">Supported: MP4, MOV, WEBM, MKV. Max 30MB.</p>
+              <p className="text-xs text-muted-foreground">Supported: MP4, MOV, WEBM, MKV. Max 500MB.</p>
 
               {activeVideoUrl ? (
                 <div className="space-y-2">
