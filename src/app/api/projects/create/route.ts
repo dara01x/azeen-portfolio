@@ -2,6 +2,18 @@ import { NextResponse } from "next/server";
 import { requireApiActor } from "@/modules/properties/property.api-auth";
 import { createProject } from "@/modules/projects/project.service";
 
+function isValidationErrorMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes("required") ||
+    normalized.includes("invalid") ||
+    normalized.includes("cannot") ||
+    normalized.includes("must") ||
+    normalized.includes("at least") ||
+    normalized.includes("greater than")
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const actor = await requireApiActor(request);
@@ -33,7 +45,9 @@ export async function POST(request: Request) {
         ? 401
         : message === "Forbidden" || message === "Forbidden."
           ? 403
-          : 500;
+          : isValidationErrorMessage(message)
+            ? 400
+            : 500;
 
     return NextResponse.json(
       {

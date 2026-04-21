@@ -120,6 +120,29 @@ function normalizeUnitFeaturesValue(value: unknown) {
   };
 }
 
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is Exclude<typeof item, undefined> => item !== undefined)
+      .map((item) => stripUndefinedDeep(item)) as T;
+  }
+
+  if (
+    value &&
+    typeof value === "object" &&
+    !(value instanceof Date) &&
+    !(value instanceof Timestamp)
+  ) {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .map(([key, item]) => [key, stripUndefinedDeep(item)]);
+
+    return Object.fromEntries(entries) as T;
+  }
+
+  return value;
+}
+
 function normalizeUnitPropertiesValue(value: unknown): Unit["properties"] {
   if (!Array.isArray(value)) {
     return [];
@@ -131,15 +154,26 @@ function normalizeUnitPropertiesValue(value: unknown): Unit["properties"] {
         Record<"price" | "currency" | "interface" | "building_no" | "floor_no" | "active" | "sold", unknown>
       >;
 
-      return {
+      const normalizedOption: Unit["properties"][number] = {
         price: asNumber(raw.price),
         currency: normalizeUnitOptionCurrency(raw.currency),
         interface: asInterfaceArray(raw.interface),
-        building_no: asString(raw.building_no).trim() || undefined,
-        floor_no: asString(raw.floor_no).trim() || undefined,
         active: asBoolean(raw.active),
         sold: asBoolean(raw.sold),
       };
+
+      const buildingNo = asString(raw.building_no).trim();
+      const floorNo = asString(raw.floor_no).trim();
+
+      if (buildingNo) {
+        normalizedOption.building_no = buildingNo;
+      }
+
+      if (floorNo) {
+        normalizedOption.floor_no = floorNo;
+      }
+
+      return normalizedOption;
     })
     .filter((item) => Number.isFinite(item.price));
 }
@@ -582,7 +616,7 @@ export async function createUnit(data: UnitWriteInput, scope?: UnitAccessScope):
     updated_at: now,
   };
 
-  const docRef = await db.collection("units").add(payload);
+  const docRef = await db.collection("units").add(stripUndefinedDeep(payload));
   const createdDoc = await docRef.get();
 
   return mapDocToUnitRecord(docRef.id, createdDoc.data() || {});
@@ -656,7 +690,7 @@ export async function updateUnit(
     updated_at: now,
   };
 
-  await docRef.set(payload, { merge: true });
+  await docRef.set(stripUndefinedDeep(payload), { merge: true });
 
   const updatedDoc = await docRef.get();
   return mapDocToUnitRecord(id, updatedDoc.data() || {});

@@ -58,6 +58,11 @@ type PropertyFormState = Omit<Property, "id" | "listing_type" | "ownership_type"
 
 const OPTIONAL_LINK_NONE = "__none__";
 const MAX_PROPERTY_VIDEO_FILE_SIZE_BYTES = 500 * 1024 * 1024;
+const ERROR_TOAST_STYLE = {
+  background: "hsl(var(--destructive))",
+  color: "hsl(var(--destructive-foreground))",
+  borderColor: "hsl(var(--destructive))",
+};
 
 const TOWER_NUMBER_TYPE_KEYWORDS = ["apartment", "department", "villa", "شقة", "فيلا"];
 
@@ -255,6 +260,22 @@ const PropertyForm = () => {
   const canViewAgentContact = user?.role === "admin";
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(prev => ({ ...prev, [key]: value }));
   const activeVideoUrl = localVideoPreviewUrl || form.video_url || "";
+
+  useEffect(() => {
+    if (!error) {
+      return;
+    }
+
+    toast.error(error, { style: ERROR_TOAST_STYLE });
+  }, [error]);
+
+  useEffect(() => {
+    if (!lookupError) {
+      return;
+    }
+
+    toast.error(lookupError, { style: ERROR_TOAST_STYLE });
+  }, [lookupError]);
 
   const clearLocalVideoSelection = () => {
     setLocalVideoFile(null);
@@ -486,13 +507,6 @@ const PropertyForm = () => {
     } catch (deleteError) {
       const message = deleteError instanceof Error ? deleteError.message : "Failed to delete property.";
       setError(message);
-      toast.error(message, {
-        style: {
-          background: "hsl(var(--destructive))",
-          color: "hsl(var(--destructive-foreground))",
-          borderColor: "hsl(var(--destructive))",
-        },
-      });
     } finally {
       setDeleting(false);
     }
@@ -652,13 +666,6 @@ const PropertyForm = () => {
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Failed to save property.";
       setError(message);
-      toast.error(message, {
-        style: {
-          background: "hsl(var(--destructive))",
-          color: "hsl(var(--destructive-foreground))",
-          borderColor: "hsl(var(--destructive))",
-        },
-      });
     } finally {
       setSaving(false);
     }

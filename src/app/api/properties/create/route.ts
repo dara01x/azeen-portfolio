@@ -3,6 +3,18 @@ import { createProperty } from "@/modules/properties/property.service";
 
 export const runtime = "nodejs";
 
+function isValidationErrorMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes("required") ||
+    normalized.includes("invalid") ||
+    normalized.includes("cannot") ||
+    normalized.includes("must") ||
+    normalized.includes("at least") ||
+    normalized.includes("greater than")
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const actor = await requireApiActor(request);
@@ -29,6 +41,7 @@ export async function POST(request: Request) {
     }
 
     const message = error instanceof Error ? error.message : "Failed to create property.";
-    return Response.json({ success: false, error: message }, { status: 500 });
+    const status = isValidationErrorMessage(message) ? 400 : 500;
+    return Response.json({ success: false, error: message }, { status });
   }
 }

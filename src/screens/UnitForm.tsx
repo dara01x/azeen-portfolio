@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { ImageUpload } from "@/components/ImageUpload";
 import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth/useAuth";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import type { AppVariableItem } from "@/modules/app-variables/types";
@@ -21,6 +22,11 @@ import type { Project, Unit, UnitOption, User } from "@/types";
 
 const OPTIONAL_LINK_NONE = "__none__";
 const DIRECTION_OPTIONS = ["North", "Northwest", "Northeast", "South", "Southwest", "Southeast", "West", "East"];
+const ERROR_TOAST_STYLE = {
+  background: "hsl(var(--destructive))",
+  color: "hsl(var(--destructive-foreground))",
+  borderColor: "hsl(var(--destructive))",
+};
 
 type LocalImageFileMap = Record<string, File>;
 
@@ -162,6 +168,22 @@ const UnitForm = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!error) {
+      return;
+    }
+
+    toast.error(error, { style: ERROR_TOAST_STYLE });
+  }, [error]);
+
+  useEffect(() => {
+    if (!lookupError) {
+      return;
+    }
+
+    toast.error(lookupError, { style: ERROR_TOAST_STYLE });
+  }, [lookupError]);
 
   const selectedTypeName = useMemo(
     () => propertyTypes.find((item) => item.id === form.type_id)?.name || "",

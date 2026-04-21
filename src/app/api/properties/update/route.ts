@@ -3,6 +3,18 @@ import { updateProperty } from "@/modules/properties/property.service";
 
 export const runtime = "nodejs";
 
+function isValidationErrorMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes("required") ||
+    normalized.includes("invalid") ||
+    normalized.includes("cannot") ||
+    normalized.includes("must") ||
+    normalized.includes("at least") ||
+    normalized.includes("greater than")
+  );
+}
+
 export async function PUT(request: Request) {
   try {
     const actor = await requireApiActor(request);
@@ -31,7 +43,8 @@ export async function PUT(request: Request) {
     }
 
     const message = error instanceof Error ? error.message : "Failed to update property.";
-    const status = message === "Property not found." ? 404 : 500;
+    const status =
+      message === "Property not found." ? 404 : isValidationErrorMessage(message) ? 400 : 500;
     return Response.json({ success: false, error: message }, { status });
   }
 }

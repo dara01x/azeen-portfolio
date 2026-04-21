@@ -126,7 +126,7 @@ export async function uploadUnitImageBlobUrls(
     if (!file) {
       const response = await fetch(url);
       if (!response.ok) {
-        continue;
+        throw new Error(`Failed to read selected image (${response.status}).`);
       }
 
       const blob = await response.blob();
@@ -155,7 +155,7 @@ export async function uploadUnitImageBlobUrls(
     };
 
     if (!uploadResponse.ok || !uploadPayload.success || !uploadPayload.url) {
-      continue;
+      throw new Error(uploadPayload.error || `Unit image upload failed (${uploadResponse.status}).`);
     }
 
     uploaded.push(uploadPayload.url);

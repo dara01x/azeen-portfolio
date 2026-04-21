@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ImageUpload } from "@/components/ImageUpload";
+import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/lib/auth/useAuth";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
 import type { AppVariableItem } from "@/modules/app-variables/types";
@@ -36,6 +37,11 @@ type LocalImageFileMap = Record<string, File>;
 const OPTIONAL_LINK_NONE = "__none__";
 const DIRECTION_OPTIONS = ["north", "east", "south", "west"];
 const MAX_PROJECT_VIDEO_FILE_SIZE_BYTES = 30 * 1024 * 1024;
+const ERROR_TOAST_STYLE = {
+  background: "hsl(var(--destructive))",
+  color: "hsl(var(--destructive-foreground))",
+  borderColor: "hsl(var(--destructive))",
+};
 
 function splitImageUrls(images: string[], localFilesByUrl: LocalImageFileMap) {
   const uploadedImages: string[] = [];
@@ -302,6 +308,38 @@ const ProjectForm = () => {
   const [unitSaving, setUnitSaving] = useState(false);
   const [unitDeletingId, setUnitDeletingId] = useState<string | null>(null);
   const [unitError, setUnitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!error) {
+      return;
+    }
+
+    toast.error(error, { style: ERROR_TOAST_STYLE });
+  }, [error]);
+
+  useEffect(() => {
+    if (!lookupError) {
+      return;
+    }
+
+    toast.error(lookupError, { style: ERROR_TOAST_STYLE });
+  }, [lookupError]);
+
+  useEffect(() => {
+    if (!unitsError) {
+      return;
+    }
+
+    toast.error(unitsError, { style: ERROR_TOAST_STYLE });
+  }, [unitsError]);
+
+  useEffect(() => {
+    if (!unitError) {
+      return;
+    }
+
+    toast.error(unitError, { style: ERROR_TOAST_STYLE });
+  }, [unitError]);
 
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));

@@ -61,6 +61,20 @@ async function uploadVideoDirectlyToFirebaseStorage(
   return getDownloadURL(storageRef);
 }
 
+async function uploadImageDirectlyToFirebaseStorage(
+  objectPath: string,
+  file: File,
+): Promise<string> {
+  const storageRef = ref(storage, objectPath);
+
+  await uploadBytes(storageRef, file, {
+    contentType: file.type || "image/jpeg",
+    cacheControl: "public,max-age=31536000,immutable",
+  });
+
+  return getDownloadURL(storageRef);
+}
+
 async function authorizedJsonFetch<TResponse>(
   url: string,
   init: RequestInit = {},
@@ -165,7 +179,7 @@ export async function uploadProjectImageBlobUrls(
     if (!file) {
       const response = await fetch(url);
       if (!response.ok) {
-        continue;
+        throw new Error(`Failed to read selected image (${response.status}).`);
       }
 
       const blob = await response.blob();
@@ -173,6 +187,18 @@ export async function uploadProjectImageBlobUrls(
       file = new File([blob], `${fileName}${extension}`, {
         type: blob.type || "image/jpeg",
       });
+    }
+
+    const imageExtension = extensionFromMimeType(file.type || "image/jpeg");
+    const safeName = sanitizeBaseName(file.name || fileName);
+    const directObjectPath = `projects/${projectId}/${Date.now()}-${randomSuffix()}-${safeName}${imageExtension}`;
+
+    try {
+      const directUrl = await uploadImageDirectlyToFirebaseStorage(directObjectPath, file);
+      uploaded.push(directUrl);
+      continue;
+    } catch {
+      // Fallback keeps compatibility if client-side storage rules block direct uploads.
     }
 
     const formData = new FormData();
@@ -194,7 +220,11 @@ export async function uploadProjectImageBlobUrls(
     };
 
     if (!uploadResponse.ok || !uploadPayload.success || !uploadPayload.url) {
-      continue;
+      const message =
+        uploadResponse.status === 413
+          ? "Project image upload request is too large. Please upload a smaller image."
+          : uploadPayload.error || `Project image upload failed (${uploadResponse.status}).`;
+      throw new Error(message);
     }
 
     uploaded.push(uploadPayload.url);
@@ -223,7 +253,7 @@ export async function uploadProjectVideoFile(projectId: string, file: File): Pro
   }
 
   const contentType = file.type || "video/mp4";
-  const ext = extensionFromMimeType(contentType);
+  const ext = extensionFromMimeType(contentType).replace(/^\./, "");
   const safeName = sanitizeBaseName(file.name || "project-video");
   const objectPath = `projects/${projectId}/videos/${Date.now()}-${randomSuffix()}-${safeName}.${ext}`;
 
