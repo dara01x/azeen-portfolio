@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { ImageUpload } from "@/components/ImageUpload";
@@ -21,7 +22,6 @@ import {
   getProjectById,
   updateProject,
   uploadProjectImageBlobUrls,
-  uploadProjectVideoFile,
 } from "@/modules/projects/project.client";
 import {
   createUnit,
@@ -36,7 +36,6 @@ type LocalImageFileMap = Record<string, File>;
 
 const OPTIONAL_LINK_NONE = "__none__";
 const DIRECTION_OPTIONS = ["north", "east", "south", "west"];
-const MAX_PROJECT_VIDEO_SELECTION_SIZE_BYTES = 250 * 1024 * 1024;
 const ERROR_TOAST_STYLE = {
   background: "hsl(var(--destructive))",
   color: "hsl(var(--destructive-foreground))",
@@ -232,6 +231,16 @@ function getUnitPriceRangeLabel(unit: Unit) {
   return minimum === maximum ? `${minimum} ${currency}` : `${minimum} - ${maximum} ${currency}`;
 }
 
+function getUnitGalleryImages(unit: Pick<Unit, "images" | "main_image">): string[] {
+  const imageList = Array.isArray(unit.images) ? unit.images.filter(Boolean) : [];
+
+  if (unit.main_image && !imageList.includes(unit.main_image)) {
+    imageList.unshift(unit.main_image);
+  }
+
+  return imageList;
+}
+
 const defaultProject: Omit<Project, "id"> = {
   title: "",
   description: "",
@@ -295,9 +304,6 @@ const ProjectForm = () => {
   const [companies, setCompanies] = useState<User[]>([]);
   const [viewers, setViewers] = useState<User[]>([]);
   const [localImageFiles, setLocalImageFiles] = useState<LocalImageFileMap>({});
-  const [localVideoFile, setLocalVideoFile] = useState<File | null>(null);
-  const [localVideoPreviewUrl, setLocalVideoPreviewUrl] = useState("");
-  const videoInputRef = useRef<HTMLInputElement | null>(null);
   const [unitLocalImageFiles, setUnitLocalImageFiles] = useState<LocalImageFileMap>({});
   const [units, setUnits] = useState<Unit[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
@@ -308,6 +314,9 @@ const ProjectForm = () => {
   const [unitSaving, setUnitSaving] = useState(false);
   const [unitDeletingId, setUnitDeletingId] = useState<string | null>(null);
   const [unitError, setUnitError] = useState<string | null>(null);
+  const [unitPreviewOpen, setUnitPreviewOpen] = useState(false);
+  const [previewUnit, setPreviewUnit] = useState<Unit | null>(null);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
 
   useEffect(() => {
     if (!error) {
@@ -344,53 +353,6 @@ const ProjectForm = () => {
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
-  const activeVideoUrl = localVideoPreviewUrl || form.video_url || "";
-
-  const clearLocalVideoSelection = () => {
-    setLocalVideoFile(null);
-    setLocalVideoPreviewUrl((current) => {
-      if (current.startsWith("blob:")) {
-        URL.revokeObjectURL(current);
-      }
-
-      return "";
-    });
-
-    if (videoInputRef.current) {
-      videoInputRef.current.value = "";
-    }
-  };
-
-  const handleVideoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    if (!selectedFile) {
-      return;
-    }
-
-    if (!selectedFile.type.startsWith("video/")) {
-      setError("Please select a valid video file.");
-      event.target.value = "";
-      return;
-    }
-
-    if (selectedFile.size > MAX_PROJECT_VIDEO_SELECTION_SIZE_BYTES) {
-      setError("Video is too large to process. Please use a file up to 250MB.");
-      event.target.value = "";
-      return;
-    }
-
-    setError(null);
-    setLocalVideoFile(selectedFile);
-    update("video_url", "");
-
-    setLocalVideoPreviewUrl((current) => {
-      if (current.startsWith("blob:")) {
-        URL.revokeObjectURL(current);
-      }
-
-      return URL.createObjectURL(selectedFile);
-    });
-  };
 
   const clearUnitLocalImageFiles = () => {
     setUnitLocalImageFiles((current) => {
@@ -409,13 +371,16 @@ const ProjectForm = () => {
     [areas],
   );
 
-  useEffect(() => {
-    return () => {
-      if (localVideoPreviewUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(localVideoPreviewUrl);
-      }
-    };
-  }, [localVideoPreviewUrl]);
+  const previewUnitImages = useMemo(
+    () => (previewUnit ? getUnitGalleryImages(previewUnit) : []),
+    [previewUnit],
+  );
+
+  const safePreviewImageIndex =
+    previewUnitImages.length > 0 && previewImageIndex < previewUnitImages.length ? previewImageIndex : 0;
+
+  const previewImageUrl =
+    previewUnitImages.length > 0 ? previewUnitImages[safePreviewImageIndex] : undefined;
 
   useEffect(() => {
     if (authLoading) {
@@ -502,7 +467,6 @@ const ProjectForm = () => {
     if (!isEdit) {
       setLoading(false);
       setLocalImageFiles({});
-      clearLocalVideoSelection();
       return;
     }
 
@@ -527,7 +491,6 @@ const ProjectForm = () => {
         }
 
         setLocalImageFiles({});
-        clearLocalVideoSelection();
         const { id: _id, ...rest } = project;
 
         setForm({
@@ -674,6 +637,12 @@ const ProjectForm = () => {
     setUnitEditingId(null);
     setUnitError(null);
     setUnitDraft(createDefaultUnitDraft(id || ""));
+  };
+
+  const closeUnitPreview = () => {
+    setUnitPreviewOpen(false);
+    setPreviewUnit(null);
+    setPreviewImageIndex(0);
   };
 
   const updateUnitDraft = <K extends keyof Omit<Unit, "id">>(key: K, value: Omit<Unit, "id">[K]) => {
@@ -944,7 +913,6 @@ const ProjectForm = () => {
         amenities: Array.from(new Set((form.amenities || []).map((item) => item.trim()).filter(Boolean))),
         area_size: Number(form.area_size) || 0,
         starting_price: Number(form.starting_price) || 0,
-        video_url: isEdit ? form.video_url?.trim() || undefined : undefined,
         assigned_company_id: form.assigned_company_id || undefined,
         assigned_viewer_id: (form.assigned_viewer_id || "").trim() || undefined,
         internal_notes: (form.internal_notes || "").trim(),
@@ -964,13 +932,8 @@ const ProjectForm = () => {
 
       const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeLocalFiles);
       const preferredMainImage = resolvePreferredMainImage(payload.main_image, payload.images);
-      let resolvedVideoUrl = isEdit ? (payload.video_url || "").trim() : "";
 
       if (isEdit && id) {
-        if (localVideoFile) {
-          resolvedVideoUrl = await uploadProjectVideoFile(id, localVideoFile);
-        }
-
         const newlyUploadedImages = await uploadProjectImageBlobUrls(id, localBlobImages, activeLocalFiles);
         if (localBlobImages.length > 0 && newlyUploadedImages.length === 0) {
           throw new Error("Image upload did not complete. Please reselect images and try again.");
@@ -988,7 +951,6 @@ const ProjectForm = () => {
           ...payload,
           images: allImages,
           main_image: selectedMainImage || allImages[0],
-          video_url: resolvedVideoUrl,
         });
       } else {
         const initialMainImage =
@@ -1000,7 +962,6 @@ const ProjectForm = () => {
           ...payload,
           images: uploadedImages,
           main_image: initialMainImage,
-          video_url: undefined,
         });
 
         const newlyUploadedImages = await uploadProjectImageBlobUrls(
@@ -1027,7 +988,6 @@ const ProjectForm = () => {
             ...payload,
             images: allImages,
             main_image: selectedMainImage || allImages[0],
-            video_url: undefined,
           });
         }
       }
@@ -1037,7 +997,6 @@ const ProjectForm = () => {
       });
 
       setLocalImageFiles({});
-      clearLocalVideoSelection();
       router.push("/projects");
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Failed to save project.";
@@ -1185,7 +1144,7 @@ const ProjectForm = () => {
             </div>
           </FormSection>
 
-          <FormSection title="Media" description="Upload project images and video">
+          <FormSection title="Media" description="Upload project images">
             <div className="space-y-5">
               <div>
                 <Label className="mb-3 block">Images (Optional)</Label>
@@ -1229,55 +1188,6 @@ const ProjectForm = () => {
                   }}
                 />
               </div>
-
-              {isEdit ? (
-                <>
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <Label className="block">Video (Optional)</Label>
-                    <Input
-                      ref={videoInputRef}
-                      type="file"
-                      accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/*"
-                      onChange={handleVideoFileChange}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Supported: MP4, MOV, WEBM, MKV. Videos above 30MB are compressed before upload.
-                    </p>
-
-                    {activeVideoUrl ? (
-                      <div className="space-y-2">
-                        <video
-                          className="w-full max-h-64 rounded-md border bg-black object-contain"
-                          src={activeVideoUrl}
-                          controls
-                        />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              clearLocalVideoSelection();
-                              update("video_url", "");
-                            }}
-                          >
-                            Remove Video
-                          </Button>
-                          {localVideoFile ? (
-                            <p className="text-xs text-muted-foreground truncate">{localVideoFile.name}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">No video uploaded.</p>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">Video can be added after creating the project.</p>
-              )}
             </div>
           </FormSection>
 
@@ -1391,6 +1301,20 @@ const ProjectForm = () => {
                             <span className="rounded-full border px-2.5 py-1 text-[11px] font-medium capitalize">
                               {unit.status}
                             </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                              onClick={() => {
+                                setPreviewUnit(unit);
+                                setPreviewImageIndex(0);
+                                setUnitPreviewOpen(true);
+                              }}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              Preview
+                            </Button>
                             <Button
                               type="button"
                               variant="outline"
@@ -1748,6 +1672,76 @@ const ProjectForm = () => {
               </div>
             )}
           </FormSection>
+
+          <Dialog open={unitPreviewOpen} onOpenChange={(open) => (open ? setUnitPreviewOpen(true) : closeUnitPreview())}>
+            <DialogContent className="max-w-2xl">
+              <DialogTitle>{previewUnit?.title || "Unit preview"}</DialogTitle>
+              <DialogDescription>Preview unit images and details.</DialogDescription>
+
+              {previewUnit ? (
+                <div className="space-y-4">
+                  {previewImageUrl ? (
+                    <div className="space-y-2">
+                      <div className="overflow-hidden rounded-md border bg-muted">
+                        <img
+                          src={previewImageUrl}
+                          alt={previewUnit.title || getUnitTypeName(previewUnit.type_id, propertyTypes)}
+                          className="h-64 w-full object-cover"
+                        />
+                      </div>
+
+                      {previewUnitImages.length > 1 ? (
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {previewUnitImages.map((imageUrl, index) => (
+                            <button
+                              key={`${previewUnit.id}-preview-${index}`}
+                              type="button"
+                              className={`overflow-hidden rounded border ${
+                                index === safePreviewImageIndex
+                                  ? "border-primary ring-1 ring-primary"
+                                  : "border-border"
+                              }`}
+                              onClick={() => setPreviewImageIndex(index)}
+                            >
+                              <img
+                                src={imageUrl}
+                                alt={`Unit image ${index + 1}`}
+                                className="h-14 w-20 object-cover"
+                                loading="lazy"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                      No images uploaded for this unit yet.
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                    <div className="rounded-lg border px-3 py-2">
+                      <p className="text-xs text-muted-foreground">Status</p>
+                      <p className="font-medium capitalize">{previewUnit.status}</p>
+                    </div>
+                    <div className="rounded-lg border px-3 py-2">
+                      <p className="text-xs text-muted-foreground">Type</p>
+                      <p className="font-medium">{getUnitTypeName(previewUnit.type_id, propertyTypes)}</p>
+                    </div>
+                    <div className="rounded-lg border px-3 py-2">
+                      <p className="text-xs text-muted-foreground">Options</p>
+                      <p className="font-medium">{previewUnit.properties?.length || 0}</p>
+                    </div>
+                    <div className="rounded-lg border px-3 py-2">
+                      <p className="text-xs text-muted-foreground">Price</p>
+                      <p className="font-medium">{getUnitPriceRangeLabel(previewUnit)}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </DialogContent>
+          </Dialog>
 
           <FormSection title="Internal Notes">
             <div className="space-y-2">
