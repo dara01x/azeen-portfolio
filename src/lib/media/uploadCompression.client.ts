@@ -153,21 +153,16 @@ export async function compressImageForUpload(
       fileType: outputType,
     });
 
-    const compressedFile =
-      compressedResult instanceof File
-        ? compressedResult
-        : new File([compressedResult], file.name, {
-            type: compressedResult.type || outputType,
-            lastModified: Date.now(),
-          });
+    const compressedFile = compressedResult;
+    const compressedFileType = compressedFile.type || outputType;
 
     const normalizedName = ensureFileNameForType(
       file.name,
-      compressedFile.type || outputType,
+      compressedFileType,
     );
 
     const renamedCompressedFile = new File([compressedFile], normalizedName, {
-      type: compressedFile.type || outputType,
+      type: compressedFileType,
       lastModified: Date.now(),
     });
 
