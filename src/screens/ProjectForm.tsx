@@ -944,7 +944,7 @@ const ProjectForm = () => {
         amenities: Array.from(new Set((form.amenities || []).map((item) => item.trim()).filter(Boolean))),
         area_size: Number(form.area_size) || 0,
         starting_price: Number(form.starting_price) || 0,
-        video_url: form.video_url?.trim() || undefined,
+        video_url: isEdit ? form.video_url?.trim() || undefined : undefined,
         assigned_company_id: form.assigned_company_id || undefined,
         assigned_viewer_id: (form.assigned_viewer_id || "").trim() || undefined,
         internal_notes: (form.internal_notes || "").trim(),
@@ -964,7 +964,7 @@ const ProjectForm = () => {
 
       const { uploadedImages, localBlobImages } = splitImageUrls(payload.images, activeLocalFiles);
       const preferredMainImage = resolvePreferredMainImage(payload.main_image, payload.images);
-      let resolvedVideoUrl = (payload.video_url || "").trim();
+      let resolvedVideoUrl = isEdit ? (payload.video_url || "").trim() : "";
 
       if (isEdit && id) {
         if (localVideoFile) {
@@ -1000,12 +1000,8 @@ const ProjectForm = () => {
           ...payload,
           images: uploadedImages,
           main_image: initialMainImage,
-          video_url: resolvedVideoUrl || undefined,
+          video_url: undefined,
         });
-
-        if (localVideoFile) {
-          resolvedVideoUrl = await uploadProjectVideoFile(created.id, localVideoFile);
-        }
 
         const newlyUploadedImages = await uploadProjectImageBlobUrls(
           created.id,
@@ -1019,7 +1015,7 @@ const ProjectForm = () => {
 
         const allImages = [...uploadedImages, ...newlyUploadedImages];
 
-        if (allImages.length > 0 || localVideoFile) {
+        if (allImages.length > 0) {
           const selectedMainImage = resolveMainImageAfterUpload(
             preferredMainImage,
             uploadedImages,
@@ -1031,7 +1027,7 @@ const ProjectForm = () => {
             ...payload,
             images: allImages,
             main_image: selectedMainImage || allImages[0],
-            video_url: resolvedVideoUrl,
+            video_url: undefined,
           });
         }
       }
@@ -1234,48 +1230,54 @@ const ProjectForm = () => {
                 />
               </div>
 
-              <Separator />
+              {isEdit ? (
+                <>
+                  <Separator />
 
-              <div className="space-y-3">
-                <Label className="block">Video (Optional)</Label>
-                <Input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/*"
-                  onChange={handleVideoFileChange}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Supported: MP4, MOV, WEBM, MKV. Videos above 30MB are compressed before upload.
-                </p>
-
-                {activeVideoUrl ? (
-                  <div className="space-y-2">
-                    <video
-                      className="w-full max-h-64 rounded-md border bg-black object-contain"
-                      src={activeVideoUrl}
-                      controls
+                  <div className="space-y-3">
+                    <Label className="block">Video (Optional)</Label>
+                    <Input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/*"
+                      onChange={handleVideoFileChange}
                     />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          clearLocalVideoSelection();
-                          update("video_url", "");
-                        }}
-                      >
-                        Remove Video
-                      </Button>
-                      {localVideoFile ? (
-                        <p className="text-xs text-muted-foreground truncate">{localVideoFile.name}</p>
-                      ) : null}
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Supported: MP4, MOV, WEBM, MKV. Videos above 30MB are compressed before upload.
+                    </p>
+
+                    {activeVideoUrl ? (
+                      <div className="space-y-2">
+                        <video
+                          className="w-full max-h-64 rounded-md border bg-black object-contain"
+                          src={activeVideoUrl}
+                          controls
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              clearLocalVideoSelection();
+                              update("video_url", "");
+                            }}
+                          >
+                            Remove Video
+                          </Button>
+                          {localVideoFile ? (
+                            <p className="text-xs text-muted-foreground truncate">{localVideoFile.name}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No video uploaded.</p>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No video uploaded.</p>
-                )}
-              </div>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Video can be added after creating the project.</p>
+              )}
             </div>
           </FormSection>
 
@@ -1357,18 +1359,32 @@ const ProjectForm = () => {
                   <div className="space-y-3">
                     {units.map((unit) => {
                       const optionCount = unit.properties?.length || 0;
+                      const unitPreviewImage = unit.main_image || unit.images?.[0];
 
                       return (
                         <div
                           key={unit.id}
                           className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
                         >
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">{unit.title || getUnitTypeName(unit.type_id, propertyTypes)}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {getUnitTypeName(unit.type_id, propertyTypes)} • {optionCount} option
-                              {optionCount === 1 ? "" : "s"} • {getUnitPriceRangeLabel(unit)}
-                            </p>
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="h-14 w-20 shrink-0 overflow-hidden rounded-md border bg-muted">
+                              {unitPreviewImage ? (
+                                <img
+                                  src={unitPreviewImage}
+                                  alt={unit.title || getUnitTypeName(unit.type_id, propertyTypes)}
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              ) : null}
+                            </div>
+
+                            <div className="min-w-0 space-y-1">
+                              <p className="truncate text-sm font-medium">{unit.title || getUnitTypeName(unit.type_id, propertyTypes)}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {getUnitTypeName(unit.type_id, propertyTypes)} • {optionCount} option
+                                {optionCount === 1 ? "" : "s"} • {getUnitPriceRangeLabel(unit)}
+                              </p>
+                            </div>
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2">
