@@ -2,6 +2,7 @@
 
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { auth, storage } from "@/lib/firebase/client";
+import { compressImageForUpload, compressVideoForUpload } from "@/lib/media/uploadCompression.client";
 import type { Project } from "@/types";
 
 type ProjectApiItem = Project & {
@@ -10,6 +11,9 @@ type ProjectApiItem = Project & {
 };
 
 const MAX_PROJECT_VIDEO_UPLOAD_SIZE_BYTES = 30 * 1024 * 1024;
+const TARGET_PROJECT_IMAGE_UPLOAD_SIZE_BYTES = 3 * 1024 * 1024;
+const TARGET_PROJECT_VIDEO_UPLOAD_SIZE_BYTES = 24 * 1024 * 1024;
+const MAX_PROJECT_VIDEO_INPUT_SIZE_BYTES = 250 * 1024 * 1024;
 
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 type JsonObject = { [key: string]: JsonValue };
@@ -189,12 +193,18 @@ export async function uploadProjectImageBlobUrls(
       });
     }
 
-    const imageExtension = extensionFromMimeType(file.type || "image/jpeg");
-    const safeName = sanitizeBaseName(file.name || fileName);
+    const uploadReadyImage = await compressImageForUpload(file, {
+      maxBytes: TARGET_PROJECT_IMAGE_UPLOAD_SIZE_BYTES,
+      maxWidthOrHeight: 2200,
+      convertToWebp: true,
+    });
+
+    const imageExtension = extensionFromMimeType(uploadReadyImage.type || "image/jpeg");
+    const safeName = sanitizeBaseName(uploadReadyImage.name || fileName);
     const directObjectPath = `projects/${projectId}/${Date.now()}-${randomSuffix()}-${safeName}${imageExtension}`;
 
     try {
-      const directUrl = await uploadImageDirectlyToFirebaseStorage(directObjectPath, file);
+      const directUrl = await uploadImageDirectlyToFirebaseStorage(directObjectPath, uploadReadyImage);
       uploaded.push(directUrl);
       continue;
     } catch {
@@ -203,7 +213,7 @@ export async function uploadProjectImageBlobUrls(
 
     const formData = new FormData();
     formData.append("projectId", projectId);
-    formData.append("file", file, file.name || `${fileName}.jpg`);
+    formData.append("file", uploadReadyImage, uploadReadyImage.name || `${fileName}.jpg`);
 
     const uploadResponse = await fetch("/api/projects/upload-images", {
       method: "POST",
@@ -248,17 +258,38 @@ export async function uploadProjectVideoFile(projectId: string, file: File): Pro
     throw new Error("Please select a valid video file.");
   }
 
-  if (file.size > MAX_PROJECT_VIDEO_UPLOAD_SIZE_BYTES) {
-    throw new Error("Video is too large. Please use a file up to 30MB.");
+  let uploadReadyVideo = file;
+
+  if (file.size > TARGET_PROJECT_VIDEO_UPLOAD_SIZE_BYTES) {
+    try {
+      uploadReadyVideo = await compressVideoForUpload(file, {
+        maxBytes: TARGET_PROJECT_VIDEO_UPLOAD_SIZE_BYTES,
+        maxInputBytes: MAX_PROJECT_VIDEO_INPUT_SIZE_BYTES,
+      });
+    } catch (compressionError) {
+      if (file.size > MAX_PROJECT_VIDEO_UPLOAD_SIZE_BYTES) {
+        const message =
+          compressionError instanceof Error
+            ? compressionError.message
+            : "Video is too large. Please use a file up to 30MB.";
+        throw new Error(message);
+      }
+
+      uploadReadyVideo = file;
+    }
   }
 
-  const contentType = file.type || "video/mp4";
+  if (uploadReadyVideo.size > MAX_PROJECT_VIDEO_UPLOAD_SIZE_BYTES) {
+    throw new Error("Video is still too large after compression. Please use a file up to 30MB.");
+  }
+
+  const contentType = uploadReadyVideo.type || "video/mp4";
   const ext = extensionFromMimeType(contentType).replace(/^\./, "");
-  const safeName = sanitizeBaseName(file.name || "project-video");
+  const safeName = sanitizeBaseName(uploadReadyVideo.name || "project-video");
   const objectPath = `projects/${projectId}/videos/${Date.now()}-${randomSuffix()}-${safeName}.${ext}`;
 
   try {
-    return await uploadVideoDirectlyToFirebaseStorage(objectPath, file);
+    return await uploadVideoDirectlyToFirebaseStorage(objectPath, uploadReadyVideo);
   } catch {
     // Fallback keeps compatibility if client-side storage rules block direct uploads.
   }
@@ -266,7 +297,11 @@ export async function uploadProjectVideoFile(projectId: string, file: File): Pro
   const token = await user.getIdToken();
   const formData = new FormData();
   formData.append("projectId", projectId);
-  formData.append("file", file, file.name || `project-video-${Date.now()}.mp4`);
+  formData.append(
+    "file",
+    uploadReadyVideo,
+    uploadReadyVideo.name || `project-video-${Date.now()}.mp4`,
+  );
 
   const uploadResponse = await fetch("/api/projects/upload-video", {
     method: "POST",

@@ -1,6 +1,7 @@
 "use client";
 
 import { auth } from "@/lib/firebase/client";
+import { compressImageForUpload } from "@/lib/media/uploadCompression.client";
 import type { Unit } from "@/types";
 
 type UnitApiItem = Unit & {
@@ -8,6 +9,8 @@ type UnitApiItem = Unit & {
   updated_at?: string | null;
   sold_at?: string | null;
 };
+
+const TARGET_UNIT_IMAGE_UPLOAD_SIZE_BYTES = 3 * 1024 * 1024;
 
 function extensionFromMimeType(type: string): string {
   const normalized = type.toLowerCase();
@@ -136,9 +139,15 @@ export async function uploadUnitImageBlobUrls(
       });
     }
 
+    const uploadReadyImage = await compressImageForUpload(file, {
+      maxBytes: TARGET_UNIT_IMAGE_UPLOAD_SIZE_BYTES,
+      maxWidthOrHeight: 2200,
+      convertToWebp: true,
+    });
+
     const formData = new FormData();
     formData.append("unitId", unitId);
-    formData.append("file", file, file.name || `${fileName}.jpg`);
+    formData.append("file", uploadReadyImage, uploadReadyImage.name || `${fileName}.jpg`);
 
     const uploadResponse = await fetch("/api/units/upload-images", {
       method: "POST",

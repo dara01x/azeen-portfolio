@@ -36,7 +36,7 @@ type LocalImageFileMap = Record<string, File>;
 
 const OPTIONAL_LINK_NONE = "__none__";
 const DIRECTION_OPTIONS = ["north", "east", "south", "west"];
-const MAX_PROJECT_VIDEO_FILE_SIZE_BYTES = 30 * 1024 * 1024;
+const MAX_PROJECT_VIDEO_SELECTION_SIZE_BYTES = 250 * 1024 * 1024;
 const ERROR_TOAST_STYLE = {
   background: "hsl(var(--destructive))",
   color: "hsl(var(--destructive-foreground))",
@@ -373,8 +373,8 @@ const ProjectForm = () => {
       return;
     }
 
-    if (selectedFile.size > MAX_PROJECT_VIDEO_FILE_SIZE_BYTES) {
-      setError("Video is too large. Please use a file up to 30MB.");
+    if (selectedFile.size > MAX_PROJECT_VIDEO_SELECTION_SIZE_BYTES) {
+      setError("Video is too large to process. Please use a file up to 250MB.");
       event.target.value = "";
       return;
     }
@@ -1244,7 +1244,9 @@ const ProjectForm = () => {
                   accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/*"
                   onChange={handleVideoFileChange}
                 />
-                <p className="text-xs text-muted-foreground">Supported: MP4, MOV, WEBM, MKV. Max 30MB.</p>
+                <p className="text-xs text-muted-foreground">
+                  Supported: MP4, MOV, WEBM, MKV. Videos above 30MB are compressed before upload.
+                </p>
 
                 {activeVideoUrl ? (
                   <div className="space-y-2">

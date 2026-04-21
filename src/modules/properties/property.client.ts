@@ -2,6 +2,7 @@
 
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { auth, storage } from "@/lib/firebase/client";
+import { compressImageForUpload, compressVideoForUpload } from "@/lib/media/uploadCompression.client";
 import type { Property } from "@/types";
 
 type PropertyWritePayload = Omit<Property, "id" | "listing_type" | "payment_type"> & {
@@ -17,6 +18,9 @@ type PropertyApiItem = Property & {
 
 const MAX_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024;
 const MAX_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024;
+const TARGET_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES = 3 * 1024 * 1024;
+const TARGET_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES = 24 * 1024 * 1024;
+const MAX_PROPERTY_VIDEO_COMPRESSION_INPUT_SIZE_BYTES = 250 * 1024 * 1024;
 
 function sanitizeBaseName(fileName: string) {
   const withoutExt = fileName.replace(/\.[^/.]+$/, "");
@@ -193,9 +197,15 @@ export async function uploadPropertyImageBlobUrls(
       throw new Error("Image is too large. Please use images up to 500MB each.");
     }
 
+    const uploadReadyImage = await compressImageForUpload(uploadFile, {
+      maxBytes: TARGET_PROPERTY_IMAGE_UPLOAD_SIZE_BYTES,
+      maxWidthOrHeight: 2200,
+      convertToWebp: true,
+    });
+
     const formData = new FormData();
     formData.append("propertyId", propertyId);
-    formData.append("files", uploadFile, uploadFile.name);
+    formData.append("files", uploadReadyImage, uploadReadyImage.name);
 
     const response = await fetch("/api/properties/upload-images", {
       method: "POST",
@@ -243,13 +253,34 @@ export async function uploadPropertyVideoFile(propertyId: string, file: File): P
     throw new Error("Video is too large. Please use a file up to 500MB.");
   }
 
-  const contentType = file.type || "video/mp4";
+  let uploadReadyVideo = file;
+
+  if (file.size > TARGET_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES) {
+    try {
+      uploadReadyVideo = await compressVideoForUpload(file, {
+        maxBytes: TARGET_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES,
+        maxInputBytes: MAX_PROPERTY_VIDEO_COMPRESSION_INPUT_SIZE_BYTES,
+      });
+    } catch (compressionError) {
+      if (file.size > MAX_PROPERTY_VIDEO_UPLOAD_SIZE_BYTES) {
+        const message =
+          compressionError instanceof Error
+            ? compressionError.message
+            : "Video is too large. Please use a file up to 500MB.";
+        throw new Error(message);
+      }
+
+      uploadReadyVideo = file;
+    }
+  }
+
+  const contentType = uploadReadyVideo.type || "video/mp4";
   const ext = extensionFromMimeType(contentType);
-  const safeName = sanitizeBaseName(file.name || "property-video");
+  const safeName = sanitizeBaseName(uploadReadyVideo.name || "property-video");
   const objectPath = `properties/${propertyId}/videos/${Date.now()}-${randomSuffix()}-${safeName}.${ext}`;
 
   try {
-    return await uploadVideoDirectlyToFirebaseStorage(objectPath, file);
+    return await uploadVideoDirectlyToFirebaseStorage(objectPath, uploadReadyVideo);
   } catch {
     // Fallback keeps compatibility if client-side storage rules block direct uploads.
   }
@@ -263,7 +294,11 @@ export async function uploadPropertyVideoFile(propertyId: string, file: File): P
 
   const formData = new FormData();
   formData.append("propertyId", propertyId);
-  formData.append("file", file, file.name || `property-video.${extensionFromMimeType(contentType)}`);
+  formData.append(
+    "file",
+    uploadReadyVideo,
+    uploadReadyVideo.name || `property-video.${extensionFromMimeType(contentType)}`,
+  );
 
   const response = await fetch("/api/properties/upload-video", {
     method: "POST",
