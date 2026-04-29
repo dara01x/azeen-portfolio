@@ -146,6 +146,13 @@ export async function updateProperty(id: string, data: PropertyWritePayload): Pr
   return payload.property as PropertyApiItem;
 }
 
+export async function deletePropertyVideo(propertyId: string): Promise<void> {
+  await authorizedJsonFetch("/api/properties/delete-video", {
+    method: "POST",
+    body: JSON.stringify({ propertyId }),
+  });
+}
+
 export async function deleteProperty(id: string): Promise<void> {
   await authorizedJsonFetch("/api/properties/delete", {
     method: "DELETE",
@@ -292,43 +299,58 @@ export async function uploadPropertyVideoFile(propertyId: string, file: File): P
     headers.set("Authorization", `Bearer ${idToken}`);
   }
 
-  const formData = new FormData();
-  formData.append("propertyId", propertyId);
-  formData.append(
-    "file",
-    uploadReadyVideo,
-    uploadReadyVideo.name || `property-video.${extensionFromMimeType(contentType)}`,
-  );
-
-  const response = await fetch("/api/properties/upload-video", {
+  const startResponse = await fetch("/api/properties/upload-video-start", {
     method: "POST",
-    headers,
-    body: formData,
+    headers: { ...Object.fromEntries(headers), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      propertyId,
+      fileName: uploadReadyVideo.name,
+      contentType,
+    }),
     cache: "no-store",
   });
 
-  const payload = await response.json().catch(() => ({}));
+  const startPayload = await startResponse.json().catch(() => ({}));
 
-  if (!response.ok) {
-    if (response.status === 413) {
-      const message =
-        typeof payload?.error === "string"
-          ? payload.error
-          : "Video upload request is too large for this deployment. Please upload a smaller video.";
-      throw new Error(message);
+  if (!startResponse.ok) {
+    throw new Error(startPayload.error || "Failed to initiate video upload.");
+  }
+
+  const { uploadUrl, objectPath: serverObjectPath, downloadToken, bucketName } = startPayload;
+
+  const chunkSize = 3 * 1024 * 1024; // 3MB chunks to stay under Vercel 4.5MB limit
+  const totalSize = uploadReadyVideo.size;
+  let offset = 0;
+
+  while (offset < totalSize) {
+    const chunkEnd = Math.min(offset + chunkSize, totalSize);
+    const chunkBlob = uploadReadyVideo.slice(offset, chunkEnd, contentType);
+    const range = `bytes ${offset}-${chunkEnd - 1}/${totalSize}`;
+
+    const chunkFormData = new FormData();
+    chunkFormData.append("propertyId", propertyId);
+    chunkFormData.append("uploadUrl", uploadUrl);
+    chunkFormData.append("range", range);
+    chunkFormData.append("chunk", chunkBlob, "chunk.blob");
+
+    const chunkResponse = await fetch("/api/properties/upload-video-chunk", {
+      method: "POST",
+      headers,
+      body: chunkFormData,
+      cache: "no-store",
+    });
+
+    const chunkPayload = await chunkResponse.json().catch(() => ({}));
+
+    if (!chunkResponse.ok) {
+      if (chunkResponse.status === 413) {
+        throw new Error("Video chunk is too large for this deployment.");
+      }
+      throw new Error(chunkPayload.error || "Failed to upload video chunk. Please try again.");
     }
 
-    const message =
-      typeof payload?.error === "string"
-        ? payload.error
-        : `Property video upload failed (${response.status}).`;
-    throw new Error(message);
+    offset = chunkEnd;
   }
 
-  const uploadedUrl = typeof payload?.url === "string" ? payload.url : "";
-  if (!uploadedUrl) {
-    throw new Error("Property video upload did not return a valid URL.");
-  }
-
-  return uploadedUrl;
+  return `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(serverObjectPath)}?alt=media&token=${downloadToken}`;
 }

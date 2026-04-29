@@ -30,6 +30,7 @@ import {
   updateProperty,
   uploadPropertyImageBlobUrls,
   uploadPropertyVideoFile,
+  deletePropertyVideo,
 } from "@/modules/properties/property.client";
 import { getUsers as fetchUsers } from "@/modules/users/user.client";
 import { getVariables } from "@/modules/app-variables/appVariables.client";
@@ -245,6 +246,7 @@ const PropertyForm = () => {
   const [lookupsLoading, setLookupsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletingVideo, setDeletingVideo] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -509,6 +511,29 @@ const PropertyForm = () => {
       setError(message);
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleDeleteVideo() {
+    if (!isEdit || !id || authLoading || !user || deletingVideo) {
+      return;
+    }
+
+    setDeletingVideo(true);
+    setError(null);
+
+    try {
+      await deletePropertyVideo(id);
+      
+      clearLocalVideoSelection();
+      update("video_url", "");
+      
+      toast.success("Video deleted successfully.");
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : "Failed to delete video.";
+      setError(message);
+    } finally {
+      setDeletingVideo(false);
     }
   }
 
@@ -923,17 +948,47 @@ const PropertyForm = () => {
                     controls
                   />
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        clearLocalVideoSelection();
-                        update("video_url", "");
-                      }}
-                    >
-                      Remove Video
-                    </Button>
+                    {isEdit && !localVideoPreviewUrl && form.video_url ? (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button type="button" variant="destructive" size="sm" disabled={deletingVideo}>
+                            {deletingVideo ? "Deleting..." : "Delete from Server"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Video?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete the uploaded video from the server immediately. This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                void handleDeleteVideo();
+                              }}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          clearLocalVideoSelection();
+                          update("video_url", "");
+                        }}
+                      >
+                        Remove Video
+                      </Button>
+                    )}
                     {localVideoFile ? (
                       <p className="text-xs text-muted-foreground truncate">{localVideoFile.name}</p>
                     ) : null}
